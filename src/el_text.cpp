@@ -6,9 +6,27 @@
 namespace
 {
 
-bool normalize_preserved_whitespace(const litehtml::string& input, litehtml::string& output)
+bool needs_preserved_whitespace_normalization(const litehtml::string& input)
 {
-	bool changed = false;
+	for (char ch : input)
+	{
+		switch (ch)
+		{
+		case '\t':
+		case '\n':
+		case '\r':
+		case '\f':
+			return true;
+		default:
+			break;
+		}
+	}
+
+	return false;
+}
+
+void normalize_preserved_whitespace(const litehtml::string& input, litehtml::string& output)
+{
 	output.clear();
 	output.reserve(input.size());
 
@@ -18,20 +36,16 @@ bool normalize_preserved_whitespace(const litehtml::string& input, litehtml::str
 		{
 		case '\t':
 			output += "    ";
-			changed = true;
 			break;
 		case '\n':
 		case '\r':
 		case '\f':
-			changed = true;
 			break;
 		default:
 			output.push_back(ch);
 			break;
 		}
 	}
-
-	return changed;
 }
 
 }
@@ -47,11 +61,30 @@ litehtml::el_text::el_text(const char* text, const document::ptr& doc) : element
 	css_w().set_display(display_inline_text);
 }
 
+litehtml::el_text::el_text(const char* text, size_t len, const document::ptr& doc) : element(doc)
+{
+	if(text && len)
+	{
+		m_text.assign(text, len);
+	}
+	m_use_transformed	= false;
+	m_draw_spaces		= true;
+	css_w().set_display(display_inline_text);
+}
+
 void litehtml::el_text::append_trailing_space(const char* text)
 {
 	if (text)
 	{
 		m_trailing_space += text;
+	}
+}
+
+void litehtml::el_text::append_trailing_space(const char* text, size_t len)
+{
+	if (text && len)
+	{
+		m_trailing_space.append(text, len);
 	}
 }
 
@@ -112,10 +145,13 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 		m_use_transformed = true;
 	} else
 	{
-		litehtml::string preserved =
+		const litehtml::string& preserved =
 			m_use_transformed ? m_transformed_text : m_text;
-		if (normalize_preserved_whitespace(preserved, m_transformed_text))
+		if (needs_preserved_whitespace_normalization(preserved))
 		{
+			litehtml::string normalized;
+			normalize_preserved_whitespace(preserved, normalized);
+			m_transformed_text.swap(normalized);
 			m_use_transformed = true;
 		}
 	}
@@ -123,7 +159,10 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 	if(!m_trailing_space.empty() &&
 		!is_one_of(m_css.get_white_space(), white_space_normal, white_space_nowrap, white_space_pre_line))
 	{
-		normalize_preserved_whitespace(m_trailing_space, m_transformed_trailing_space);
+		if (needs_preserved_whitespace_normalization(m_trailing_space))
+		{
+			normalize_preserved_whitespace(m_trailing_space, m_transformed_trailing_space);
+		}
 	}
 	m_draw_trailing_space = true;
 

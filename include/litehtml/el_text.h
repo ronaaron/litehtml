@@ -21,7 +21,9 @@ namespace litehtml
 			bool			m_draw_trailing_space = true;
 		public:
 				el_text(const char* text, const document::ptr& doc);
+				el_text(const char* text, size_t len, const document::ptr& doc);
 			void				append_trailing_space(const char* text);
+			void				append_trailing_space(const char* text, size_t len);
 
 				void				get_text(string& text) const override;
 			void				compute_styles(bool recursive) override;

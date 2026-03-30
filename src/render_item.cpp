@@ -4,10 +4,51 @@
 #include "document_container.h"
 #include "types.h"
 
+namespace
+{
+
+inline bool is_zero_length(const litehtml::css_length& len)
+{
+	return !len.is_predefined() && len.val() == 0.0f;
+}
+
+inline bool has_zero_outlines(const litehtml::css_properties& css)
+{
+	const auto& margins = css.get_margins();
+	const auto& padding = css.get_padding();
+	const auto& borders = css.get_borders();
+	return is_zero_length(margins.left) &&
+	       is_zero_length(margins.right) &&
+	       is_zero_length(margins.top) &&
+	       is_zero_length(margins.bottom) &&
+	       is_zero_length(padding.left) &&
+	       is_zero_length(padding.right) &&
+	       is_zero_length(padding.top) &&
+	       is_zero_length(padding.bottom) &&
+	       is_zero_length(borders.left.width) &&
+	       is_zero_length(borders.right.width) &&
+	       is_zero_length(borders.top.width) &&
+	       is_zero_length(borders.bottom.width);
+}
+
+}
+
 litehtml::render_item::render_item(std::shared_ptr<element>  _src_el) :
         m_element(std::move(_src_el)),
         m_skip(false)
 {
+    if (src_el()->is_text())
+    {
+        m_zero_outlines = true;
+        return;
+    }
+
+    if (has_zero_outlines(src_el()->css()))
+    {
+        m_zero_outlines = true;
+        return;
+    }
+
     document::ptr doc = src_el()->get_document();
 	auto fm = css().get_font_metrics();
 
@@ -59,6 +100,8 @@ litehtml::pixel_t litehtml::render_item::render(pixel_t x, pixel_t y, const cont
 
 void litehtml::render_item::calc_outlines( pixel_t parent_width )
 {
+    if (m_zero_outlines) return;
+
     m_padding.left	= m_element->css().get_padding().left.calc_percent(parent_width);
     m_padding.right	= m_element->css().get_padding().right.calc_percent(parent_width);
 
@@ -215,6 +258,18 @@ std::tuple<
 
 bool litehtml::render_item::fetch_positioned()
 {
+    if (!m_has_positioned_descendants)
+    {
+        m_positioned.clear();
+        return false;
+    }
+
+    if (!m_has_absolute_or_fixed_descendants)
+    {
+        m_positioned.clear();
+        return false;
+    }
+
     bool ret = false;
 
     m_positioned.clear();
@@ -224,6 +279,10 @@ bool litehtml::render_item::fetch_positioned()
     for(auto& el : m_children)
     {
         el_pos = el->src_el()->css().get_position();
+        if (el_pos == element_position_static && !el->m_has_positioned_descendants)
+        {
+            continue;
+        }
         if (el_pos != element_position_static)
         {
             add_positioned(el);
@@ -232,7 +291,7 @@ bool litehtml::render_item::fetch_positioned()
         {
             ret = true;
         }
-        if(el->fetch_positioned())
+        if(el->m_has_absolute_or_fixed_descendants && el->fetch_positioned())
         {
             ret = true;
         }
@@ -1292,7 +1351,10 @@ std::shared_ptr<litehtml::render_item> litehtml::render_item::init()
 	{
 		doc->perf_note_render_item_init(src_el()->is_text(), src_el()->is_space());
 	}
-    src_el()->add_render(shared_from_this());
+    if (src_el()->css().get_display() != display_inline_text)
+    {
+        src_el()->add_render(shared_from_this());
+    }
 
     for(auto& el : children())
     {

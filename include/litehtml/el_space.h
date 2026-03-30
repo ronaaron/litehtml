@@ -9,6 +9,7 @@ namespace litehtml
 	{
 		public:
 			el_space(const char* text, const std::shared_ptr<document>& doc);
+			el_space(const char* text, size_t len, const std::shared_ptr<document>& doc);
 
 			bool is_white_space() const override;
 		bool is_break() const override;

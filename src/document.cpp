@@ -32,6 +32,81 @@
 namespace litehtml
 {
 
+namespace
+{
+
+struct text_scan_result
+{
+	size_t len = 0;
+	bool ascii_only = true;
+};
+
+text_scan_result scan_text(const char* text)
+{
+	text_scan_result result;
+	if (!text) return result;
+
+	for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p; ++p)
+	{
+		result.len++;
+		if (*p & 0x80) result.ascii_only = false;
+	}
+	return result;
+}
+
+inline bool is_ascii_horizontal_space(unsigned char ch)
+{
+	return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\f';
+}
+
+template<typename WordCallback, typename SpaceCallback>
+void split_ascii_text(const char* text, const WordCallback& on_word, const SpaceCallback& on_space)
+{
+	const char* segment_start = text;
+	const char* p = text;
+	while (*p)
+	{
+		unsigned char ch = static_cast<unsigned char>(*p);
+		if (ch == '\n')
+		{
+			if (p > segment_start)
+			{
+				on_word(segment_start, static_cast<size_t>(p - segment_start));
+			}
+			on_space(p, 1);
+			++p;
+			segment_start = p;
+			continue;
+		}
+
+		if (is_ascii_horizontal_space(ch))
+		{
+			if (p > segment_start)
+			{
+				on_word(segment_start, static_cast<size_t>(p - segment_start));
+			}
+			const char* space_start = p;
+			do
+			{
+				++p;
+				ch = static_cast<unsigned char>(*p);
+			} while (*p && is_ascii_horizontal_space(ch));
+			on_space(space_start, static_cast<size_t>(p - space_start));
+			segment_start = p;
+			continue;
+		}
+
+		++p;
+	}
+
+	if (p > segment_start)
+	{
+		on_word(segment_start, static_cast<size_t>(p - segment_start));
+	}
+}
+
+}
+
 document::document(document_container* container)
 {
 	m_container	= container;
@@ -83,7 +158,7 @@ document::ptr document::createFromString(
 		doc->m_root = root_elements.back();
 	}
 	verdad::perf::logf(
-		"litehtml::document::createFromString create_node: %.3f ms (elements=%zu textNodes=%zu textFragments=%zu spaceFragments=%zu foldedSpaceRuns=%zu foldedSpaceBytes=%zu whitespaceChars=%zu splitTextCalls=%zu splitTextBytes=%zu splitTextMs=%.3f whitespaceRuns=%zu whitespaceBytes=%zu whitespaceMs=%.3f)",
+		"litehtml::document::createFromString create_node: %.3f ms (elements=%zu textNodes=%zu textFragments=%zu spaceFragments=%zu foldedSpaceRuns=%zu foldedSpaceBytes=%zu whitespaceChars=%zu asciiSplitCalls=%zu asciiSplitBytes=%zu asciiSplitMs=%.3f splitTextCalls=%zu splitTextBytes=%zu splitTextMs=%.3f whitespaceRuns=%zu whitespaceBytes=%zu whitespaceMs=%.3f)",
 		step.elapsedMs(),
 		doc->m_perf_element_count,
 		doc->m_perf_text_node_count,
@@ -92,6 +167,9 @@ document::ptr document::createFromString(
 		doc->m_perf_trailing_space_fold_count,
 		doc->m_perf_trailing_space_fold_bytes,
 		doc->m_perf_whitespace_char_count,
+		doc->m_perf_ascii_split_calls,
+		doc->m_perf_ascii_split_bytes,
+		doc->m_perf_ascii_split_ms,
 		doc->m_perf_split_text_calls,
 		doc->m_perf_split_text_bytes,
 		doc->m_perf_split_text_ms,
@@ -105,19 +183,35 @@ document::ptr document::createFromString(
 	verdad::perf::logf("litehtml::document::createFromString gumbo_destroy_output: %.3f ms", step.elapsedMs());
 	step.reset();
 
-	if (master_styles != "")
-	{
-		doc->m_master_css.parse_css_stylesheet(master_styles, "", doc);
-		doc->m_master_css.sort_selectors();
-	}
+	// Cache pre-parsed CSS objects to avoid reparsing identical stylesheets.
+	// The css class is implicitly copyable (vectors of shared_ptr<css_selector>).
+	struct css_cache_entry {
+		string text;
+		litehtml::css parsed;
+	};
+	static std::vector<css_cache_entry> s_css_cache;
+
+	auto find_or_parse_css = [&](const string& css_text, litehtml::css& target) {
+		if (css_text.empty()) return;
+		for (const auto& entry : s_css_cache) {
+			if (entry.text == css_text) {
+				target = entry.parsed;
+				return;
+			}
+		}
+		target.parse_css_stylesheet(css_text, "", doc);
+		target.sort_selectors();
+		if (s_css_cache.size() >= 8) {
+			s_css_cache.erase(s_css_cache.begin());
+		}
+		s_css_cache.push_back({css_text, target});
+	};
+
+	find_or_parse_css(master_styles, doc->m_master_css);
 	verdad::perf::logf("litehtml::document::createFromString master_css: %.3f ms", step.elapsedMs());
 	step.reset();
 
-	if (user_styles != "")
-	{
-		doc->m_user_css.parse_css_stylesheet(user_styles, "", doc);
-		doc->m_user_css.sort_selectors();
-	}
+	find_or_parse_css(user_styles, doc->m_user_css);
 	verdad::perf::logf("litehtml::document::createFromString user_css: %.3f ms", step.elapsedMs());
 	step.reset();
 
@@ -373,27 +467,56 @@ GumboOutput* document::parse_html(estring str)
 void document::create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root)
 {
 	auto* node = (GumboNode*)gnode;
-	auto append_text_fragment = [this, &elements](const char* text)
+	document::ptr this_doc = shared_from_this();
+	auto append_text_fragment = [this, &elements, &this_doc](const char* text)
 	{
-		elements.push_back(std::make_shared<el_text>(text, shared_from_this()));
+		elements.push_back(std::make_shared<el_text>(text, this_doc));
 		m_perf_text_fragment_count++;
 	};
-	auto append_space_fragment = [this, &elements](const char* text)
+	auto append_text_fragment_range = [this, &elements, &this_doc](const char* text, size_t len)
 	{
+		if (!len) return;
+		elements.push_back(std::make_shared<el_text>(text, len, this_doc));
+		m_perf_text_fragment_count++;
+	};
+	auto append_space_fragment = [this, &elements, &this_doc](const char* text)
+	{
+		const size_t text_len = text ? std::strlen(text) : 0;
 		bool is_line_break = text && text[0] == '\n' && text[1] == '\0';
 		if (!is_line_break && !elements.empty())
 		{
-			auto last_text = std::dynamic_pointer_cast<el_text>(elements.back());
-			if (last_text && !elements.back()->is_space())
+			auto& last = elements.back();
+			if (last && last->is_text() && !last->is_space())
 			{
+				auto last_text = std::static_pointer_cast<el_text>(last);
 				last_text->append_trailing_space(text);
 				m_perf_trailing_space_fold_count++;
-				m_perf_trailing_space_fold_bytes += std::strlen(text);
+				m_perf_trailing_space_fold_bytes += text_len;
 				return;
 			}
 		}
 
-		elements.push_back(std::make_shared<el_space>(text, shared_from_this()));
+		elements.push_back(std::make_shared<el_space>(text, this_doc));
+		m_perf_space_fragment_count++;
+	};
+	auto append_space_fragment_range = [this, &elements, &this_doc](const char* text, size_t len)
+	{
+		if (!text || !len) return;
+		bool is_line_break = len == 1 && text[0] == '\n';
+		if (!is_line_break && !elements.empty())
+		{
+			auto& last = elements.back();
+			if (last && last->is_text() && !last->is_space())
+			{
+				auto last_text = std::static_pointer_cast<el_text>(last);
+				last_text->append_trailing_space(text, len);
+				m_perf_trailing_space_fold_count++;
+				m_perf_trailing_space_fold_bytes += len;
+				return;
+			}
+		}
+
+		elements.push_back(std::make_shared<el_space>(text, len, this_doc));
 		m_perf_space_fragment_count++;
 	};
 
@@ -440,12 +563,7 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 				{
 					child.clear();
 					create_node(static_cast<GumboNode*> (node->v.element.children.data[i]), child, parseTextNode, true);
-					std::for_each(child.begin(), child.end(),
-						[&ret](element::ptr& el)
-						{
-							ret->appendChild(el);
-						}
-					);
+					ret->appendChildren(child);
 				}
 				elements.push_back(ret);
 			}
@@ -467,11 +585,20 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 		}
 		else
 		{
-				verdad::perf::StepTimer split_timer;
+			const auto scan = scan_text(node->v.text.text);
+			verdad::perf::StepTimer split_timer;
+			if (scan.ascii_only)
+			{
+				split_ascii_text(node->v.text.text, append_text_fragment_range, append_space_fragment_range);
+				perf_note_ascii_split(scan.len, split_timer.elapsedMs());
+			}
+			else
+			{
 				m_container->split_text(node->v.text.text,
 					append_text_fragment,
 					append_space_fragment);
-				perf_note_split_text(std::strlen(node->v.text.text), split_timer.elapsedMs());
+				perf_note_split_text(scan.len, split_timer.elapsedMs());
+			}
 		}
 	}
 	break;
@@ -491,13 +618,21 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 	break;
 	case GUMBO_NODE_WHITESPACE:
 	{
-		string str = node->v.text.text;
-		m_perf_whitespace_char_count += str.length();
-			verdad::perf::StepTimer split_timer;
+		const auto scan = scan_text(node->v.text.text);
+		m_perf_whitespace_char_count += scan.len;
+		verdad::perf::StepTimer split_timer;
+		if (scan.ascii_only)
+		{
+			split_ascii_text(node->v.text.text, append_text_fragment_range, append_space_fragment_range);
+			perf_note_ascii_split(scan.len, split_timer.elapsedMs());
+		}
+		else
+		{
 			m_container->split_text(node->v.text.text,
 				append_text_fragment,
 				append_space_fragment);
-		perf_note_whitespace_expand(str.length(), split_timer.elapsedMs());
+		}
+		perf_note_whitespace_expand(scan.len, split_timer.elapsedMs());
 	}
 	break;
 	default:
@@ -638,6 +773,8 @@ uint_ptr document::get_font( const font_description& descr, font_metrics* fm )
 
 pixel_t document::render( pixel_t max_width, render_type rt )
 {
+	verdad::perf::ScopeTimer timer("litehtml::document::render");
+	verdad::perf::StepTimer step;
 	pixel_t ret = 0;
 	if(m_root && m_root_render)
 	{
@@ -653,17 +790,30 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 		{
 			m_fixed_boxes.clear();
 			m_root_render->render_positioned(rt);
+			verdad::perf::logf("litehtml::document::render render_positioned_only: %.3f ms", step.elapsedMs());
 		} else
 		{
 			ret = m_root_render->render(0, 0, cb_context, nullptr);
-			if(m_root_render->fetch_positioned())
+			verdad::perf::logf("litehtml::document::render layout_tree: %.3f ms", step.elapsedMs());
+			step.reset();
+
+			const bool hasPositioned = m_root_render->fetch_positioned();
+			verdad::perf::logf("litehtml::document::render fetch_positioned: %.3f ms (hasPositioned=%d)",
+				step.elapsedMs(),
+				hasPositioned ? 1 : 0);
+			step.reset();
+
+			if(hasPositioned)
 			{
 				m_fixed_boxes.clear();
 				m_root_render->render_positioned(rt);
+				verdad::perf::logf("litehtml::document::render render_positioned: %.3f ms", step.elapsedMs());
+				step.reset();
 			}
 			m_size.width	= 0;
 			m_size.height	= 0;
 			m_root_render->calc_document_size(m_size);
+			verdad::perf::logf("litehtml::document::render calc_document_size: %.3f ms", step.elapsedMs());
 		}
 	}
 	return ret;

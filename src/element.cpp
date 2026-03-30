@@ -467,6 +467,14 @@ bool element::is_nth_last_child(const element::ptr& /*el*/, int /*num*/, int /*o
 bool element::is_nth_child(const element::ptr&, int /*num*/, int /*off*/, bool /*of_type*/, const css_selector::vector& /*selector_list*/) const LITEHTML_RETURN_FUNC(false)
 bool element::is_only_child(const element::ptr& /*el*/, bool /*of_type*/) const		LITEHTML_RETURN_FUNC(false)
 void element::get_content_size( size& /*sz*/, pixel_t /*max_width*/ )				LITEHTML_EMPTY_FUNC
+void element::appendChildren(elements_list& children)
+{
+	for (const auto& child : children)
+	{
+		appendChild(child);
+	}
+	children.clear();
+}
 bool element::appendChild(const ptr &/*el*/)										LITEHTML_RETURN_FUNC(false)
 bool element::removeChild(const ptr &/*el*/)										LITEHTML_RETURN_FUNC(false)
 void element::clearRecursive()														LITEHTML_EMPTY_FUNC

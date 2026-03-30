@@ -36,6 +36,7 @@ namespace litehtml
 		// constructor for anonymous wrapper boxes
 		explicit html_tag(const element::ptr& parent, const string& style = "display: block");
 
+		void				appendChildren(elements_list& children) override;
 		bool				appendChild(const element::ptr& el) override;
 		bool				removeChild(const element::ptr& el) override;
 		void				clearRecursive() override;

@@ -75,6 +75,7 @@ namespace litehtml
 		virtual element::ptr		select_one(const string& selector);
 		virtual element::ptr		select_one(const css_selector& selector);
 
+		virtual void				appendChildren(elements_list& children);
 		virtual bool				appendChild(const ptr &el);
 		virtual bool				removeChild(const ptr &el);
 		virtual void				clearRecursive();

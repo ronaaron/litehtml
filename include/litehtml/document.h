@@ -101,6 +101,9 @@ namespace litehtml
 		size_t								m_perf_split_text_calls = 0;
 		size_t								m_perf_split_text_bytes = 0;
 		double								m_perf_split_text_ms = 0.0;
+		size_t								m_perf_ascii_split_calls = 0;
+		size_t								m_perf_ascii_split_bytes = 0;
+		double								m_perf_ascii_split_ms = 0.0;
 		size_t								m_perf_whitespace_expand_calls = 0;
 		size_t								m_perf_whitespace_expand_bytes = 0;
 		double								m_perf_whitespace_expand_ms = 0.0;
@@ -179,6 +182,12 @@ namespace litehtml
 			m_perf_split_text_calls++;
 			m_perf_split_text_bytes += bytes;
 			m_perf_split_text_ms += ms;
+		}
+		void							perf_note_ascii_split(size_t bytes, double ms)
+		{
+			m_perf_ascii_split_calls++;
+			m_perf_ascii_split_bytes += bytes;
+			m_perf_ascii_split_ms += ms;
 		}
 		void							perf_note_whitespace_expand(size_t bytes, double ms)
 		{

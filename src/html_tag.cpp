@@ -110,6 +110,21 @@ bool litehtml::html_tag::appendChild(const element::ptr &el)
 	return false;
 }
 
+void litehtml::html_tag::appendChildren(elements_list& children)
+{
+	if (children.empty())
+	{
+		return;
+	}
+
+	element::ptr self = shared_from_this();
+	for (const auto& child : children)
+	{
+		child->parent(self);
+	}
+	m_children.splice(m_children.end(), children);
+}
+
 bool litehtml::html_tag::removeChild(const element::ptr &el)
 {
 	if(el && el->parent() == shared_from_this())
@@ -424,7 +439,10 @@ void litehtml::html_tag::compute_styles(bool recursive)
 		m_style.add(style, "", doc->container());
 	}
 
-	m_style.subst_vars(this);
+	if (m_style.has_vars())
+	{
+		m_style.subst_vars(this);
+	}
 
 	m_css.compute(this, doc);
 

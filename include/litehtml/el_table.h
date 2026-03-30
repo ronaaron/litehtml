@@ -10,6 +10,7 @@ namespace litehtml
 	public:
 		explicit el_table(const std::shared_ptr<litehtml::document>& doc);
 
+		void appendChildren(elements_list& children) override;
 		bool appendChild(const litehtml::element::ptr& el) override;
 		void parse_attributes() override;
 	};
