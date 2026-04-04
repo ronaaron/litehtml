@@ -203,6 +203,48 @@ int main(int argc, char* argv[])
 		all_results.push_back(r);
 	}
 
+	// 6. flexbox stress test
+	{
+		printf("[6] flexbox stress test (100x50 grid)...\n");
+		
+		string stress_html = "<!DOCTYPE html><html><head><style>"
+			".container { display: flex; flex-direction: column; width: 1000px; height: 100%; }"
+			".row { display: flex; flex-direction: row; flex: 1; margin: 2px; }"
+			".item { flex: 1; margin: 1px; padding: 2px; border: 1px solid black; background-color: #eee; }"
+			".subitem { display: flex; flex: 1; background-color: #ddd; }"
+			"</style></head><body><div class=\"container\">";
+		
+		for (int i = 0; i < 100; i++) {
+			stress_html += "<div class=\"row\">";
+			for (int j = 0; j < 50; j++) {
+				stress_html += "<div class=\"item\"><div class=\"subitem\">Item " + std::to_string(i) + "-" + std::to_string(j) + "</div></div>";
+			}
+			stress_html += "</div>";
+		}
+		stress_html += "</div></body></html>";
+		
+		vector<double> times_parse;
+		vector<double> times_render;
+		
+		for(int i = 0; i < std::max(1, iterations / 20); i++) // Fewer iterations, it's a heavy test
+		{
+			auto t0 = chrono::high_resolution_clock::now();
+			auto doc = document::createFromString(stress_html.c_str(), &container);
+			auto t1 = chrono::high_resolution_clock::now();
+			doc->render(1024);
+			auto t2 = chrono::high_resolution_clock::now();
+			
+			times_parse.push_back(chrono::duration<double, micro>(t1 - t0).count());
+			times_render.push_back(chrono::duration<double, micro>(t2 - t1).count());
+		}
+		auto r_parse = compute_stats("flex stress - parse", times_parse);
+		auto r_render = compute_stats("flex stress - render", times_render);
+		print_result(r_parse);
+		print_result(r_render);
+		all_results.push_back(r_parse);
+		all_results.push_back(r_render);
+	}
+
 	print_summary_table(all_results);
 	printf("\nDone.\n");
 	return 0;
