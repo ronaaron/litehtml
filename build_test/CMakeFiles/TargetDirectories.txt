@@ -1,0 +1,14 @@
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/litehtml.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/edit_cache.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/rebuild_cache.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/list_install_components.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/install.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/install/local.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/CMakeFiles/install/strip.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/gumbo.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/edit_cache.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/rebuild_cache.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/list_install_components.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/install.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/install/local.dir
+/home/lxk/Desktop/pomelo-dev/pomelo-native/vendors/litexm/build_test/src/gumbo/CMakeFiles/install/strip.dir

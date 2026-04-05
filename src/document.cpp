@@ -1,3 +1,4 @@
+#include <chrono>
 #include "html.h"
 #include "document.h"
 #include "stylesheet.h"
@@ -31,6 +32,19 @@
 namespace litehtml
 {
 
+// Static master CSS cache — shared across all documents for a given master_styles string.
+// The master CSS is the browser default stylesheet — semantically identical across all
+// documents that pass the same string. User CSS (.selected, .track, etc.) lives in each
+// document's own m_styles, never here. This cache maps master_styles hash → parsed css.
+// Multiple distinct master_styles strings (e.g. different document categories) are all
+// cached simultaneously — no thrashing. Call invalidate_master_css_cache() only when you
+// need to force a re-parse of a specific or all master stylesheets.
+std::mutex        document::s_master_css_mutex;
+document::css_lru document::s_master_css_lru;
+
+std::mutex        document::s_doc_css_mutex;
+document::css_lru document::s_doc_css_lru;
+
 	document::document(document_container* container)
 	{
 		m_container = container;
@@ -59,13 +73,23 @@ namespace litehtml
 		}
 	}
 
+	/*static*/ void document::invalidate_master_css_cache()
+	{
+		std::lock_guard<std::mutex> lock(s_master_css_mutex);
+		s_master_css_lru.clear();
+	}
+
 	document::ptr document::createFromString(const estring& str, document_container* container,
 											 const string& master_styles, const string& user_styles)
 	{
+		using clock = std::chrono::steady_clock;
+		auto t_start = clock::now();
+
 		// Create litehtml::document
 		document::ptr doc	= make_shared<document>(container);
 
 		// Parse document into GumboOutput
+		auto t0 = clock::now();
 		GumboOutput* output = doc->parse_html(str);
 
 		// mode must be set before doc->create_node because it is used in html_tag::set_attr
@@ -81,6 +105,7 @@ namespace litehtml
 			doc->m_mode = limited_quirks_mode;
 			break;
 		}
+		auto t1 = clock::now();
 
 		// Create litehtml::elements.
 		elements_list root_elements;
@@ -92,12 +117,23 @@ namespace litehtml
 
 		// Destroy GumboOutput
 		gumbo_destroy_output(&kGumboDefaultOptions, output);
+		auto t2 = clock::now();
 
 		if(master_styles != "")
 		{
-			doc->m_master_css.parse_css_stylesheet(master_styles, "", doc);
-			doc->m_master_css.sort_selectors();
+			const size_t h = std::hash<string>{}(master_styles);
+			std::lock_guard<std::mutex> lock(s_master_css_mutex);
+			if (const litehtml::css* cached = s_master_css_lru.find(h))
+			{
+				doc->m_master_css = *cached;
+			} else {
+				doc->m_master_css.parse_css_stylesheet(master_styles, "", doc);
+				doc->m_master_css.sort_selectors();
+				s_master_css_lru.put(h, doc->m_master_css);
+			}
 		}
+		auto t3 = clock::now();
+
 		if(user_styles != "")
 		{
 			doc->m_user_css.parse_css_stylesheet(user_styles, "", doc);
@@ -113,36 +149,83 @@ namespace litehtml
 
 			// apply master CSS
 			doc->m_root->apply_stylesheet(doc->m_master_css);
+			auto t_ms1 = clock::now();
 
 			// parse elements attributes
 			doc->m_root->parse_attributes();
+			auto t_pa = clock::now();
 
-			// parse style sheets linked in document
-			for(const auto& css : doc->m_css)
+			// Parse style sheets linked in document (from <style> tags).
+			// Hash all CSS text blocks to look up the LRU cache first.
+			// This avoids re-parsing the same inline CSS on every document
+			// creation (e.g. opening the same view repeatedly).
 			{
-				media_query_list_list::ptr media;
-				if(css.media != "")
+				// Compute combined hash of all css_text entries.
+				size_t doc_css_hash = 0;
+				for (const auto& c : doc->m_css)
 				{
-					auto mq_list = parse_media_query_list(css.media, doc);
-					media		 = make_shared<media_query_list_list>();
-					media->add(mq_list);
+					// Boost-style hash combine to avoid trivial XOR collisions.
+					auto combine = [&](const string& s)
+					{
+						doc_css_hash ^= std::hash<string>{}(s)
+							+ 0x9e3779b9u + (doc_css_hash << 6) + (doc_css_hash >> 2);
+					};
+					combine(c.text);
+					combine(c.media);
+					combine(c.baseurl);
 				}
-				doc->m_styles.parse_css_stylesheet(css.text, css.baseurl, doc, media);
+
+				bool cache_hit = false;
+				if (!doc->m_css.empty())
+				{
+					std::lock_guard<std::mutex> lock(s_doc_css_mutex);
+					if (const litehtml::css* cached = s_doc_css_lru.find(doc_css_hash))
+					{
+						// Cache hit — copy pre-parsed css into this document's m_styles.
+						doc->m_styles = *cached;
+						cache_hit = true;
+					}
+				}
+
+				if (!cache_hit)
+				{
+					for (const auto& css : doc->m_css)
+					{
+						media_query_list_list::ptr media;
+						if (css.media != "")
+						{
+							auto mq_list = parse_media_query_list(css.media, doc);
+							media        = make_shared<media_query_list_list>();
+							media->add(mq_list);
+						}
+						doc->m_styles.parse_css_stylesheet(css.text, css.baseurl, doc, media);
+					}
+					// Sort css selectors using CSS rules.
+					doc->m_styles.sort_selectors();
+
+					if (!doc->m_css.empty())
+					{
+						std::lock_guard<std::mutex> lock(s_doc_css_mutex);
+						s_doc_css_lru.put(doc_css_hash, doc->m_styles);
+					}
+				}
 			}
-			// Sort css selectors using CSS rules.
-			doc->m_styles.sort_selectors();
+			auto t_dp = clock::now();
 
 			// Apply media features.
 			doc->update_media_lists(doc->m_media);
 
 			// Apply parsed styles.
 			doc->m_root->apply_stylesheet(doc->m_styles);
+			auto t_ds = clock::now();
 
 			// Apply user styles if any
 			doc->m_root->apply_stylesheet(doc->m_user_css);
+			auto t_us = clock::now();
 
 			// Initialize element::m_css
 			doc->m_root->compute_styles();
+			auto t_cs = clock::now();
 
 			// Create rendering tree
 			doc->m_root_render = doc->m_root->create_render_item(nullptr);
@@ -158,6 +241,29 @@ namespace litehtml
 			{
 				doc->m_root_render = doc->m_root_render->init();
 			}
+			auto t_ri = clock::now();
+
+			auto us = [](auto a, auto b) { return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count(); };
+			fprintf(stderr,
+				"[litehtml-phases] html_parse=%lldµs  elements=%lldµs  master_css_parse=%lldµs  "
+				"apply_master=%lldµs  parse_attrs=%lldµs  doc_css_parse=%lldµs  "
+				"apply_doc=%lldµs  apply_user=%lldµs  compute_styles=%lldµs  "
+				"render_tree=%lldµs  TOTAL=%lldµs  selectors: master=%zu doc=%zu user=%zu\n",
+				(long long)us(t0, t1),     // html_parse (gumbo)
+				(long long)us(t1, t2),     // elements (create_node + gumbo_destroy)
+				(long long)us(t2, t3),     // master_css_parse
+				(long long)us(t3, t_ms1),  // apply_master
+				(long long)us(t_ms1, t_pa), // parse_attributes
+				(long long)us(t_pa, t_dp),  // doc_css_parse
+				(long long)us(t_dp, t_ds),  // apply_doc
+				(long long)us(t_ds, t_us),  // apply_user
+				(long long)us(t_us, t_cs),  // compute_styles
+				(long long)us(t_cs, t_ri),  // render_tree (create + fix_tables + init)
+				(long long)us(t_start, t_ri),
+				doc->m_master_css.selectors().size(),
+				doc->m_styles.selectors().size(),
+				doc->m_user_css.selectors().size()
+			);
 		}
 
 		return doc;

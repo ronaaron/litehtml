@@ -1,6 +1,7 @@
 #include "html.h"
 #include "string_id.h"
 #include <cassert>
+#include <unordered_map>
 
 #ifndef LITEHTML_NO_THREADS
 	#include <mutex>
@@ -19,8 +20,16 @@ namespace litehtml
 // LTO merges COMDATs unexpectedly.  Function-local statics are guaranteed to
 // be initialized exactly once (C++11 §6.7) and destroyed in reverse order of
 // construction at program exit — after all TU-scope statics.
-static std::map<string, string_id>& get_map() {
-    static std::map<string, string_id> map;
+//
+// NOTE on eviction: string_id is an integer index into get_array(). Entries
+// cannot be removed without invalidating all live string_id values held by
+// every element/selector/property across all open documents. The vocabulary
+// is bounded by the app's CSS and HTML content — not by number of document
+// loads — so growth is expected to plateau quickly (few hundred entries).
+// The unordered_map gives O(1) lookups which keeps individual calls cheap
+// even as the table grows.
+static std::unordered_map<string, string_id>& get_map() {
+    static std::unordered_map<string, string_id> map;
     return map;
 }
 static std::vector<string>& get_array() {
@@ -30,6 +39,13 @@ static std::vector<string>& get_array() {
 
 static int init()
 {
+	// Pre-reserve for initial_string_ids + headroom for app CSS class names.
+	// Avoids rehash churn during the first few document loads.
+	auto& map   = get_map();
+	auto& array = get_array();
+	map.reserve(512);
+	array.reserve(512);
+
 	string_vector names;
 	split_string(initial_string_ids, names, ",");
 	for (auto& name : names)

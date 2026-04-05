@@ -184,27 +184,28 @@ namespace litehtml
 
 	void litehtml::html_tag::apply_stylesheet(const litehtml::css& stylesheet)
 	{
-		for(const auto& sel : stylesheet.selectors())
+		// Use the hash index to get candidate selectors for this element's
+		// tag, id, and current classes. This is O(matching selectors) instead
+		// of O(all selectors). Dynamic class changes are handled separately
+		// by incorporate_class_selectors() called from set_class().
+		std::vector<size_t> candidates;
+		stylesheet.get_candidates(m_tag, m_id, m_classes, candidates);
+
+		// Sort so selectors are processed in their original specificity order
+		// (the order they appear in m_selectors after sort_selectors()).
+		// This is critical for CSS cascade: later rules override earlier ones.
+		std::sort(candidates.begin(), candidates.end());
+
+		const auto& all_selectors = stylesheet.selectors();
+		for(size_t idx : candidates)
 		{
-			// optimization: skip selectors that can never match this element
-			// (wrong tag). But we must NOT skip class selectors, because
-			// classes can be added/removed dynamically via set_class().
-			{
-				const auto& r = sel->m_right;
-				if(r.m_tag != star_id && r.m_tag != m_tag)
-					continue;
-				// Note: we intentionally do NOT skip class selectors here.
-				// Even if the element doesn't currently have the class,
-				// it might be added later via set_class(), and refresh_styles()
-				// needs the selector in m_used_styles to re-evaluate it.
-			}
+			const auto& sel = all_selectors[idx];
 
 			int apply = select(*sel, false);
 
-			// Check if this selector uses any class attributes
-			// If so, we need to add it to m_used_styles even if it doesn't
-			// currently match, so refresh_styles() can re-evaluate it later
-			// when classes are added/removed dynamically.
+			// Check if this selector uses any class attributes.
+			// If so, add it to m_used_styles even if it doesn't currently match,
+			// so refresh_styles() can re-evaluate it later (e.g. class removed).
 			bool has_class_selector = false;
 			for (const auto& attr : sel->m_right.m_attrs) {
 				if (attr.type == select_class) {
@@ -287,6 +288,97 @@ namespace litehtml
 			{
 				el->apply_stylesheet(stylesheet);
 			}
+		}
+	}
+
+	// "Unlock window" — called from set_class() when a new class is added.
+	// Queries the stylesheet's hash index for selectors targeting the given
+	// class and merges newly-discovered selectors into m_used_styles.
+	//
+	// This is NOT recursive into children. The contract is:
+	// - set_class() marks all children dirty
+	// - find_styles_changes() -> refresh_styles() re-evaluates children's
+	//   existing m_used_styles, which handles descendant selectors like
+	//   ".selected .text" (the ".text" part was found during initial parse).
+	//
+	// POTENTIAL BUG SOURCE: If a child element never had a relevant selector
+	// in its m_used_styles (e.g. a newly-added class creates a selector that
+	// targets a descendant by a class the descendant had at initial parse but
+	// the selector was in a bucket not checked for that descendant), the style
+	// would not be applied. In practice this would require a selector like
+	// ".new-parent-class .existing-child-class" where .existing-child-class
+	// was already present at initial parse — which means it WAS checked.
+	void litehtml::html_tag::incorporate_class_selectors(const litehtml::css& stylesheet, string_id cls)
+	{
+		const auto& indices = stylesheet.selectors_for_class(cls);
+		const auto& all_selectors = stylesheet.selectors();
+
+		for (size_t idx : indices)
+		{
+			const auto& sel = all_selectors[idx];
+
+			// Skip if already in m_used_styles
+			bool already_known = false;
+			for (const auto& us : m_used_styles)
+			{
+				if (us->m_selector.get() == sel.get())
+				{
+					already_known = true;
+					break;
+				}
+			}
+			if (already_known) continue;
+
+			// Tag check — if selector targets a specific tag, skip if wrong tag
+			if (sel->m_right.m_tag != star_id && sel->m_right.m_tag != m_tag)
+				continue;
+
+			int apply = select(*sel, false);
+
+			// Always add class selectors to m_used_styles for future re-evaluation
+			used_selector::ptr us = std::make_unique<used_selector>(sel, false);
+
+			if (sel->is_media_valid() && apply != select_no_match)
+			{
+				if (apply & select_match_pseudo_class)
+				{
+					if (select(*sel, true))
+					{
+						if (apply & select_match_with_after)
+						{
+							element::ptr el = get_element_after(*sel->m_style, false);
+							if (el) el->add_style(*sel->m_style);
+						}
+						else if (apply & select_match_with_before)
+						{
+							element::ptr el = get_element_before(*sel->m_style, false);
+							if (el) el->add_style(*sel->m_style);
+						}
+						else
+						{
+							add_style(*sel->m_style);
+							us->m_used = true;
+						}
+					}
+				}
+				else if (apply & select_match_with_after)
+				{
+					element::ptr el = get_element_after(*sel->m_style, false);
+					if (el) el->add_style(*sel->m_style);
+				}
+				else if (apply & select_match_with_before)
+				{
+					element::ptr el = get_element_before(*sel->m_style, false);
+					if (el) el->add_style(*sel->m_style);
+				}
+				else
+				{
+					add_style(*sel->m_style);
+					us->m_used = true;
+				}
+			}
+
+			m_used_styles.push_back(std::move(us));
 		}
 	}
 
@@ -1077,6 +1169,37 @@ namespace litehtml
 			string class_string;
 			join_string(class_string, m_str_classes, " ");
 			set_attr("class", class_string.c_str());
+
+			// Rebuild m_classes (string_id vector) from m_str_classes
+			m_classes.clear();
+			for(const auto& sc : m_str_classes)
+			{
+				m_classes.push_back(_id(sc));
+			}
+
+			// UNLOCK WINDOW: When adding classes, incorporate selectors for
+			// the newly-added classes from all stylesheets. This ensures
+			// selectors like ".selected { ... }" are added to m_used_styles
+			// even though they weren't checked during the initial indexed parse.
+			// For class removal, no action is needed — refresh_styles() will
+			// re-evaluate existing m_used_styles and select() returns no_match.
+			if(add)
+			{
+				auto doc = get_document();
+				if(doc)
+				{
+					// Re-split pclass to get the original string names for _id() lookup
+					string_vector added_classes;
+					split_string(pclass, added_classes, " ");
+					for(const auto& ac : added_classes)
+					{
+						string_id cls_id = _id(ac);
+						incorporate_class_selectors(doc->get_master_css(), cls_id);
+						incorporate_class_selectors(doc->get_styles(), cls_id);
+						incorporate_class_selectors(doc->get_user_css(), cls_id);
+					}
+				}
+			}
 
 			// Mark this element and all ancestors as style-dirty
 			// so the render-width cache doesn't skip the re-render

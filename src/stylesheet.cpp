@@ -138,6 +138,113 @@ void css::sort_selectors()
 			 return (*v1) < (*v2);
 		 }
 	);
+	build_index();
+}
+
+void css::build_index()
+{
+	m_index = {};
+
+	for (size_t i = 0; i < m_selectors.size(); i++)
+	{
+		const auto& right = m_selectors[i]->m_right;
+
+		// Classify by the right-most compound selector.
+		// Each selector goes into exactly ONE bucket (highest priority wins):
+		//   id > class > tag > universal
+		bool has_id = false;
+		bool has_class = false;
+
+		for (const auto& attr : right.m_attrs)
+		{
+			if (attr.type == select_id)
+			{
+				has_id = true;
+			}
+			else if (attr.type == select_class)
+			{
+				has_class = true;
+			}
+		}
+
+		if (has_id)
+		{
+			// Put into by_id under the first #id found
+			for (const auto& attr : right.m_attrs)
+			{
+				if (attr.type == select_id)
+				{
+					m_index.by_id[attr.name].push_back(i);
+					break;
+				}
+			}
+		}
+		else if (has_class)
+		{
+			// Put into by_class under EACH class in the right-most compound selector.
+			// This allows selectors like ".a.b" to be found via either class.
+			for (const auto& attr : right.m_attrs)
+			{
+				if (attr.type == select_class)
+				{
+					m_index.by_class[attr.name].push_back(i);
+				}
+			}
+		}
+		else if (right.m_tag != star_id)
+		{
+			m_index.by_tag[right.m_tag].push_back(i);
+		}
+		else
+		{
+			m_index.universal.push_back(i);
+		}
+	}
+}
+
+const std::vector<size_t> css::s_empty_index;
+
+void css::get_candidates(string_id tag, string_id id,
+						 const std::vector<string_id>& classes,
+						 std::vector<size_t>& out) const
+{
+	// Gather from all applicable buckets.
+	// Since each selector is in exactly one bucket, there are no duplicates.
+
+	// 1. By ID
+	if (id != empty_id)
+	{
+		auto it = m_index.by_id.find(id);
+		if (it != m_index.by_id.end())
+			out.insert(out.end(), it->second.begin(), it->second.end());
+	}
+
+	// 2. By class
+	for (string_id cls : classes)
+	{
+		auto it = m_index.by_class.find(cls);
+		if (it != m_index.by_class.end())
+			out.insert(out.end(), it->second.begin(), it->second.end());
+	}
+
+	// 3. By tag
+	if (tag != star_id)
+	{
+		auto it = m_index.by_tag.find(tag);
+		if (it != m_index.by_tag.end())
+			out.insert(out.end(), it->second.begin(), it->second.end());
+	}
+
+	// 4. Universal (always checked)
+	out.insert(out.end(), m_index.universal.begin(), m_index.universal.end());
+}
+
+const std::vector<size_t>& css::selectors_for_class(string_id cls) const
+{
+	auto it = m_index.by_class.find(cls);
+	if (it != m_index.by_class.end())
+		return it->second;
+	return s_empty_index;
 }
 
 } // namespace litehtml
