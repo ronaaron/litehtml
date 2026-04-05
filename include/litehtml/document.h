@@ -7,6 +7,8 @@
 #include "encodings.h"
 #include "font_description.h"
 #include <vector>
+#include <unordered_set>
+#include "css_properties.h"
 
 typedef struct GumboInternalOutput GumboOutput;
 
@@ -71,9 +73,24 @@ namespace litehtml
 		string								m_culture;
 		string								m_text;
 		document_mode						m_mode = no_quirks_mode;
+
+		struct css_properties_hash {
+			size_t operator()(const std::shared_ptr<css_properties>& p) const {
+				return p->get_display() ^ p->get_position() ^ (int)p->get_float() ^ p->get_font();
+			}
+		};
+		struct css_properties_eq {
+			bool operator()(const std::shared_ptr<css_properties>& a, const std::shared_ptr<css_properties>& b) const {
+				return *a == *b;
+			}
+		};
+		std::unordered_set<std::shared_ptr<css_properties>, css_properties_hash, css_properties_eq> m_css_pool;
+
 	public:
 		document(document_container* objContainer);
 		virtual ~document();
+
+		std::shared_ptr<css_properties> get_flyweight_css(std::shared_ptr<css_properties> css);
 
 		document_container*				container()	{ return m_container; }
 		document_mode					mode() const { return m_mode; }

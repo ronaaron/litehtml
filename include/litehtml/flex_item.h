@@ -17,12 +17,12 @@ namespace litehtml
 	};
 
 	/**
-	 * Base class for flex item
+	 * Concrete class for flex item (data-oriented, no inheritance)
 	 */
 	class flex_item
 	{
 	public:
-		std::shared_ptr<render_item> el;
+		render_item* el;
 
 		// All sizes should be interpreted as outer/margin-box sizes.
 		pixel_t base_size;
@@ -47,7 +47,30 @@ namespace litehtml
 
 		flex_align_items align;
 
-		explicit flex_item(std::shared_ptr<render_item> &_el) :
+		bool is_row_direction;
+
+		flex_item() : 
+				el(nullptr),
+				base_size(0),
+				min_size(0),
+				max_size(0),
+				main_size(0),
+				grow(0),
+				shrink(0),
+				scaled_flex_shrink_factor(0),
+				frozen(false),
+				clamp_state(flex_clamp_state_unclamped),
+				order(0),
+				src_order(0),
+				auto_margin_main_start(0),
+				auto_margin_main_end(0),
+				auto_margin_cross_start(false),
+				auto_margin_cross_end(false),
+				align(flex_align_items_auto),
+				is_row_direction(true)
+		{}
+
+		flex_item(render_item* _el, bool _is_row) :
 				el(_el),
 				base_size(0),
 				min_size(0),
@@ -64,10 +87,9 @@ namespace litehtml
 				auto_margin_main_end(0),
 				auto_margin_cross_start(false),
 				auto_margin_cross_end(false),
-				align(flex_align_items_auto)
+				align(flex_align_items_auto),
+				is_row_direction(_is_row)
 		{}
-
-		virtual ~flex_item() = default;
 
 		bool operator<(const flex_item& b) const
 		{
@@ -75,14 +97,16 @@ namespace litehtml
 			if(order == b.order) return src_order < b.src_order;
 			return false;
 		}
+
 		void init(const litehtml::containing_block_context &self_size,
 				  litehtml::formatting_context *fmt_ctx, flex_align_items align_items);
-		virtual void apply_main_auto_margins() = 0;
-		virtual bool apply_cross_auto_margins(pixel_t cross_size) = 0;
-		virtual void set_main_position(pixel_t pos) = 0;
-		virtual void set_cross_position(pixel_t pos) = 0;
-		virtual pixel_t get_el_main_size() = 0;
-		virtual pixel_t get_el_cross_size() = 0;
+		
+		void apply_main_auto_margins();
+		bool apply_cross_auto_margins(pixel_t cross_size);
+		void set_main_position(pixel_t pos);
+		void set_cross_position(pixel_t pos);
+		pixel_t get_el_main_size();
+		pixel_t get_el_cross_size();
 
 		void place(flex_line &ln, pixel_t main_pos,
 				   const containing_block_context &self_size,
@@ -91,63 +115,13 @@ namespace litehtml
 		pixel_t get_first_baseline(baseline::_baseline_type type) const;
 
 	protected:
-		virtual void direction_specific_init(const litehtml::containing_block_context &self_size,
-											 litehtml::formatting_context *fmt_ctx) = 0;
-		virtual void align_stretch(flex_line &ln, const containing_block_context &self_size,
-								   formatting_context *fmt_ctx) = 0;
-		virtual void align_baseline(flex_line &ln,
+		void direction_specific_init(const litehtml::containing_block_context &self_size,
+											 litehtml::formatting_context *fmt_ctx);
+		void align_stretch(flex_line &ln, const containing_block_context &self_size,
+								   formatting_context *fmt_ctx);
+		void align_baseline(flex_line &ln,
 									const containing_block_context &self_size,
-									formatting_context *fmt_ctx) = 0;
-	};
-
-	/**
-	 * Flex item with "flex-direction: row" or " flex-direction: row-reverse"
-	 */
-	class flex_item_row_direction : public flex_item
-	{
-	public:
-		explicit flex_item_row_direction(std::shared_ptr<render_item> &_el) : flex_item(_el) {}
-
-		void apply_main_auto_margins() override;
-		bool apply_cross_auto_margins(pixel_t cross_size) override;
-		void set_main_position(pixel_t pos) override;
-		void set_cross_position(pixel_t pos) override;
-		pixel_t get_el_main_size() override;
-		pixel_t get_el_cross_size() override;
-
-	protected:
-		void direction_specific_init(const litehtml::containing_block_context &self_size,
-									 litehtml::formatting_context *fmt_ctx) override;
-		void align_stretch(flex_line &ln, const containing_block_context &self_size,
-						   formatting_context *fmt_ctx) override;
-		void align_baseline(flex_line &ln,
-							const containing_block_context &self_size,
-							formatting_context *fmt_ctx) override;
-	};
-
-	/**
-	 * Flex item with "flex-direction: column" or " flex-direction: column-reverse"
-	 */
-	class flex_item_column_direction : public flex_item
-	{
-	public:
-		explicit flex_item_column_direction(std::shared_ptr<render_item> &_el) : flex_item(_el) {}
-
-		void apply_main_auto_margins() override;
-		bool apply_cross_auto_margins(pixel_t cross_size) override;
-		void set_main_position(pixel_t pos) override;
-		void set_cross_position(pixel_t pos) override;
-		pixel_t get_el_main_size() override;
-		pixel_t get_el_cross_size() override;
-
-	protected:
-		void direction_specific_init(const litehtml::containing_block_context &self_size,
-									 litehtml::formatting_context *fmt_ctx) override;
-		void align_stretch(flex_line &ln, const containing_block_context &self_size,
-						   formatting_context *fmt_ctx) override;
-		void align_baseline(flex_line &ln,
-							const containing_block_context &self_size,
-							formatting_context *fmt_ctx) override;
+									formatting_context *fmt_ctx);
 	};
 }
 

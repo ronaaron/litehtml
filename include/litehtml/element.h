@@ -31,7 +31,7 @@ namespace litehtml
 		std::weak_ptr<element>				  m_parent;
 		std::weak_ptr<document>				  m_doc;
 		elements_list						  m_children;
-		css_properties						  m_css;
+		std::shared_ptr<css_properties>		  m_css;
 		std::list<std::weak_ptr<render_item>> m_renders;
 		used_selector::vector				  m_used_styles;
 		bool								  m_style_dirty = false;
@@ -208,12 +208,15 @@ namespace litehtml
 
 	inline const css_properties& element::css() const
 	{
-		return m_css;
+		return *m_css;
 	}
 
 	inline css_properties& element::css_w()
 	{
-		return m_css;
+		if (m_css.use_count() > 1) {
+			m_css = std::make_shared<css_properties>(*m_css);
+		}
+		return *m_css;
 	}
 
 	inline bool element::is_block_box() const

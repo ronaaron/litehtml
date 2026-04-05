@@ -10,7 +10,7 @@ namespace litehtml
 	class flex_line
 	{
 		public:
-		std::list<std::shared_ptr<flex_item>> items;
+		std::vector<flex_item> items;
 		pixel_t cross_start;	// for row direction: top. for column direction: left
 		pixel_t main_size;		// sum of all items main size, initially the sum of hypothetical main sizes
 		pixel_t cross_size;		// sum of all items cross size
@@ -37,13 +37,13 @@ namespace litehtml
 
 		void init(pixel_t container_main_size, bool fit_container, bool is_row_direction,
 				  const litehtml::containing_block_context &self_size,
-				  litehtml::formatting_context *fmt_ctx);
+				  litehtml::formatting_context *fmt_ctx, pixel_t main_gap = 0);
 		bool distribute_main_auto_margins(pixel_t free_main_size);
 		pixel_t  calculate_items_position(pixel_t container_main_size,
 									  flex_justify_content justify_content,
 									  bool is_row_direction,
 									  const containing_block_context &self_size,
-									  formatting_context *fmt_ctx);
+									  formatting_context *fmt_ctx, pixel_t main_gap = 0);
 	protected:
 		void distribute_free_space(pixel_t container_main_size);
 		void distribute_free_space_grow(pixel_t container_main_size);

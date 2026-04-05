@@ -36,6 +36,17 @@ namespace litehtml
 		m_container = container;
 	}
 
+	std::shared_ptr<css_properties> document::get_flyweight_css(std::shared_ptr<css_properties> css)
+	{
+		auto it = m_css_pool.find(css);
+		if (it != m_css_pool.end())
+		{
+			return *it;
+		}
+		m_css_pool.insert(css);
+		return css;
+	}
+
 	document::~document()
 	{
 		m_over_element = m_active_element = nullptr;

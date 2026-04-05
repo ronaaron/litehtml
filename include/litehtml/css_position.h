@@ -11,6 +11,11 @@ namespace litehtml
 		css_length	y;
 		css_length	width;
 		css_length	height;
+
+		bool operator==(const css_position& val) const
+		{
+			return x == val.x && y == val.y && width == val.width && height == val.height;
+		}
 	};
 
 	struct css_size
@@ -20,6 +25,11 @@ namespace litehtml
 
 		css_size() = default;
 		css_size(css_length width, css_length height) : width(width), height(height) {}
+
+		bool operator==(const css_size& val) const
+		{
+			return width == val.width && height == val.height;
+		}
 	};
 
 	using size_vector = std::vector<css_size>;

@@ -19,7 +19,8 @@ namespace litehtml
 	}
 
 	element::element(const document::ptr& doc) :
-		m_doc(doc)
+		m_doc(doc),
+		m_css(std::make_shared<css_properties>())
 	{
 	}
 
@@ -100,7 +101,7 @@ namespace litehtml
 
 	std::vector<std::tuple<string, string>> element::dump_get_attrs()
 	{
-		return m_css.dump_get_attrs();
+		return css().dump_get_attrs();
 	}
 
 	void element::dump(dumper& cout)
@@ -279,7 +280,7 @@ namespace litehtml
 
 	bool element::is_block_formatting_context() const
 	{
-		if(m_css.get_display() == display_block)
+		if(css().get_display() == display_block)
 		{
 			auto par = parent();
 			if(par && (par->css().get_display() == display_inline_flex || par->css().get_display() == display_flex))
@@ -287,11 +288,11 @@ namespace litehtml
 				return true;
 			}
 		}
-		if(m_css.get_display() == display_inline_block || m_css.get_display() == display_table_cell ||
-		   m_css.get_display() == display_inline_flex || m_css.get_display() == display_flex ||
-		   m_css.get_display() == display_table_caption || is_root() || m_css.get_float() != float_none ||
-		   m_css.get_position() == element_position_absolute || m_css.get_position() == element_position_fixed ||
-		   m_css.get_overflow() > overflow_visible)
+		if(css().get_display() == display_inline_block || css().get_display() == display_table_cell ||
+		   css().get_display() == display_inline_flex || css().get_display() == display_flex ||
+		   css().get_display() == display_table_caption || is_root() || css().get_float() != float_none ||
+		   css().get_position() == element_position_absolute || css().get_position() == element_position_fixed ||
+		   css().get_overflow() > overflow_visible)
 		{
 			return true;
 		}

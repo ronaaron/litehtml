@@ -136,6 +136,11 @@ namespace litehtml
 		size() : width(0), height(0)
 		{
 		}
+
+		bool operator==(const size& val) const
+		{
+			return width == val.width && height == val.height;
+		}
 	};
 
 	struct position
@@ -285,6 +290,13 @@ namespace litehtml
 		bool		draw_spaces = true;	// True to call draw text function for spaces. If False, just use space width without draw.
 		pixel_t		sub_shift = 0;		// The baseline shift for subscripts.
 		pixel_t		super_shift = 0;	// The baseline shift for superscripts.
+
+		bool operator==(const font_metrics& val) const
+		{
+			return font_size == val.font_size && height == val.height && ascent == val.ascent &&
+				   descent == val.descent && x_height == val.x_height && ch_width == val.ch_width &&
+				   draw_spaces == val.draw_spaces && sub_shift == val.sub_shift && super_shift == val.super_shift;
+		}
 
 		pixel_t base_line() const	{ return descent; }
 	};
@@ -1046,7 +1058,7 @@ namespace litehtml
 		flex_align_items_safe  = 0x800,
 	};
 
-#define flex_align_content_strings		"flex-start;start;flex-end;end;center;space-between;space-around;stretch"
+#define flex_align_content_strings		"flex-start;start;flex-end;end;center;space-between;space-around;space-evenly;stretch"
 
 	enum flex_align_content
 	{
@@ -1057,6 +1069,7 @@ namespace litehtml
 		flex_align_content_center,
 		flex_align_content_space_between,
 		flex_align_content_space_around,
+		flex_align_content_space_evenly,
 		flex_align_content_stretch
 	};
 
