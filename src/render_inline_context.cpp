@@ -1,4 +1,8 @@
 #include "render_inline_context.h"
+
+#include <iostream>
+#include <ostream>
+
 #include "document.h"
 #include "iterators.h"
 #include "types.h"
@@ -184,7 +188,23 @@ std::list<std::unique_ptr<litehtml::line_box_item> > litehtml::render_item_inlin
 
 litehtml::pixel_t litehtml::render_item_inline_context::new_box(const std::unique_ptr<line_box_item>& el, line_context& line_ctx, const containing_block_context &self_size, formatting_context* fmt_ctx)
 {
-	auto items = finish_last_box(false, self_size);
+    bool end_of_render = false;
+    if(!m_line_boxes.empty()) {
+        if (!m_line_boxes.back()->items().empty()) {
+            if (m_line_boxes.back()->items().back()->get_el()->src_el()->is_break())
+            {
+                end_of_render = true;
+            }
+        }
+        if (el->get_el()->src_el()->tag() == _span_)
+        {
+            if (string("column") == string(el->get_el()->src_el()->get_attr("class")))
+            {
+                end_of_render = true;
+            }
+        }
+    }
+	auto items = finish_last_box(end_of_render, self_size);
 	pixel_t line_top = 0;
 	if(!m_line_boxes.empty())
 	{
