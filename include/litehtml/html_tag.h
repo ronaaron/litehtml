@@ -118,6 +118,21 @@ namespace litehtml
 	private:
 		void				handle_counter_properties();
 
+		// "Unlock window" for dynamic class changes:
+		// When set_class() adds a new class, this method queries the stylesheet's
+		// hash index for selectors targeting that class and merges any new ones
+		// into m_used_styles. This is NOT recursive — ancestor/descendant selector
+		// evaluation relies on the existing dirty-marking + refresh_styles() path.
+		//
+		// NOTE: If you observe a class change failing to propagate styles to
+		// descendant elements, this non-recursive design could be the cause.
+		// The intended contract is that set_class() marks children dirty (it does),
+		// and find_styles_changes() -> refresh_styles() re-evaluates the stored
+		// m_used_styles for those children. If a child never had the relevant
+		// selector in its m_used_styles (e.g. the selector was in a bucket the
+		// child didn't check during initial parse), it would be missed.
+		void			incorporate_class_selectors(const litehtml::css& stylesheet, string_id cls);
+
 	};
 
 	/************************************************************************/

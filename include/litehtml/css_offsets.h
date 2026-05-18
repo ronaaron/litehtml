@@ -23,6 +23,10 @@ namespace litehtml
 		}
 
 		css_offsets& operator=(const css_offsets& val) = default;
+		bool operator==(const css_offsets& val) const
+		{
+			return left == val.left && top == val.top && right == val.right && bottom == val.bottom;
+		}
 
 		string to_string() const
 		{

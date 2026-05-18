@@ -23,6 +23,10 @@ namespace litehtml
 		}
 
 		css_margins& operator=(const css_margins& val) = default;
+		bool operator==(const css_margins& val) const
+		{
+			return left == val.left && right == val.right && top == val.top && bottom == val.bottom;
+		}
 
 		string to_string() const
 		{

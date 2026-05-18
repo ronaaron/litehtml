@@ -1,0 +1,10 @@
+# Hashes of file build rules.
+2d93dfd8bc70c5f4986e5668ead14bad CMakeFiles/litehtml-tests
+d32f583b55bc22cbdf7fc9990ca9557f CMakeFiles/litehtml-tests-complete
+1cc00d3c604a710c7c911eba2cfe00c9 litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-build
+9f96d90521448e67240923c19004c459 litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-configure
+a0295f3eedea95ac20054a4de9921a43 litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-download
+5baeaf7150abc9674d98e3c278c0d611 litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-install
+b61942057a706db9b8e483ff65c9a6de litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-mkdir
+f34459ebbd8fc8112802c3dd7b5c06ad litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-patch
+a95b57765f767042c57a9801f8c87967 litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-update

@@ -1,0 +1,43 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests-complete.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-build.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-configure.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-download.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-install.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-mkdir.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-patch.rule"
+		},
+		{
+			"file" : "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"litehtml-tests"
+		],
+		"name" : "litehtml-tests"
+	}
+}

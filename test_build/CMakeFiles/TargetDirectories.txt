@@ -1,0 +1,3 @@
+/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests.dir
+/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/edit_cache.dir
+/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/rebuild_cache.dir

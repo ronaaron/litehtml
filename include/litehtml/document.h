@@ -6,7 +6,12 @@
 #include "master_css.h"
 #include "encodings.h"
 #include "font_description.h"
+#include <list>
+#include <mutex>
+#include <unordered_map>
 #include <vector>
+#include <unordered_set>
+#include "css_properties.h"
 
 typedef struct GumboInternalOutput GumboOutput;
 
@@ -60,6 +65,7 @@ namespace litehtml
 		litehtml::css						m_master_css;
 		litehtml::css						m_user_css;
 		litehtml::size						m_size;
+		pixel_t									m_last_render_width = 0;
 		position::vector					m_fixed_boxes;
 		std::shared_ptr<element>			m_over_element;
 		std::shared_ptr<element>			m_active_element;
@@ -70,9 +76,84 @@ namespace litehtml
 		string								m_culture;
 		string								m_text;
 		document_mode						m_mode = no_quirks_mode;
+
+		struct css_properties_hash {
+			size_t operator()(const std::shared_ptr<css_properties>& p) const {
+				return (size_t)p->get_display() ^ (size_t)p->get_position() ^ (size_t)p->get_float() ^ p->get_font();
+			}
+		};
+		struct css_properties_eq {
+			bool operator()(const std::shared_ptr<css_properties>& a, const std::shared_ptr<css_properties>& b) const {
+				return *a == *b;
+			}
+		};
+		std::unordered_set<std::shared_ptr<css_properties>, css_properties_hash, css_properties_eq> m_css_pool;
+
+		// ── Shared LRU cache struct ──────────────────────────────────────────
+		// Used for both master CSS and document inline CSS caches.
+		// 16-slot LRU keyed by size_t hash. On cache hit the entry is promoted
+		// to MRU. On capacity overflow the LRU entry is evicted.
+		// Each consumer gets its own VALUE COPY so documents are independent.
+		struct css_lru
+		{
+			static constexpr size_t MAX = 16;
+			using entry_t = std::pair<size_t, litehtml::css>; // {hash, css}
+			std::list<entry_t> items; // front=MRU, back=LRU
+			std::unordered_map<size_t, std::list<entry_t>::iterator> index;
+
+			// Returns pointer to cached css on hit (promoted to MRU), nullptr on miss.
+			const litehtml::css* find(size_t h)
+			{
+				auto it = index.find(h);
+				if (it == index.end()) return nullptr;
+				items.splice(items.begin(), items, it->second); // promote to MRU
+				return &items.front().second;
+			}
+
+			// Inserts or updates an entry. Evicts LRU entry if at capacity.
+			void put(size_t h, const litehtml::css& css)
+			{
+				auto it = index.find(h);
+				if (it != index.end())
+				{
+					it->second->second = css;
+					items.splice(items.begin(), items, it->second);
+					return;
+				}
+				if (items.size() >= MAX)
+				{
+					index.erase(items.back().first);
+					items.pop_back();
+				}
+				items.emplace_front(h, css);
+				index[h] = items.begin();
+			}
+
+			// Clears all entries (e.g. after dynamic CSS injection).
+			void clear()
+			{
+				items.clear();
+				index.clear();
+			}
+		};
+
+		// Master CSS: browser default stylesheet keyed by hash(master_styles).
+		// User CSS (.selected, .track, …) is never stored here.
+		// Call invalidate_master_css_cache() after dynamic CSS injection.
+		static std::mutex  s_master_css_mutex;
+		static css_lru     s_master_css_lru;
+
+		// Document inline CSS: <style> block content keyed by combined hash
+		// of all css_text entries (text + media + baseurl).
+		static std::mutex  s_doc_css_mutex;
+		static css_lru     s_doc_css_lru;
+
+
 	public:
 		document(document_container* objContainer);
 		virtual ~document();
+
+		std::shared_ptr<css_properties> get_flyweight_css(std::shared_ptr<css_properties> css);
 
 		document_container*				container()	{ return m_container; }
 		document_mode					mode() const { return m_mode; }
@@ -114,6 +195,15 @@ namespace litehtml
 			document_container*  container,
 			const string&        master_styles = litehtml::master_css,
 			const string&        user_styles = "");
+
+		// Clears the static master CSS cache.
+		// Call this if you need to inject new CSS into the master stylesheet at runtime,
+		// so the next createFromString re-parses from the updated string.
+		static void invalidate_master_css_cache();
+
+		const litehtml::css& get_master_css() const { return m_master_css; }
+		const litehtml::css& get_styles() const     { return m_styles; }
+		const litehtml::css& get_user_css() const   { return m_user_css; }
 
 	private:
 		uint_ptr	add_font(const font_description& descr, font_metrics* fm);

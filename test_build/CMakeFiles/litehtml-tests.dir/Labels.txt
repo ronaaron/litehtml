@@ -1,0 +1,13 @@
+# Target labels
+ litehtml-tests
+# Source files and their labels
+/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests
+/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/CMakeFiles/litehtml-tests-complete.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-build.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-configure.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-download.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-install.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-mkdir.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-patch.rule
+/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-prefix/src/litehtml-tests-stamp/litehtml-tests-update.rule

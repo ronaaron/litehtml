@@ -1,0 +1,1 @@
+cmd='/usr/bin/cmake;-DLITEHTML_PATH=/home/lxk/Desktop/lite-html/litehtml;-GUnix Makefiles;-S;<SOURCE_DIR><SOURCE_SUBDIR>;-B;<BINARY_DIR>'

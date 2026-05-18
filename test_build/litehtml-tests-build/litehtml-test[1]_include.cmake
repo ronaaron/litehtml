@@ -1,0 +1,5 @@
+if(EXISTS "/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-build/litehtml-test[1]_tests.cmake")
+  include("/home/lxk/Desktop/lite-html/litehtml/test_build/litehtml-tests-build/litehtml-test[1]_tests.cmake")
+else()
+  add_test(litehtml-test_NOT_BUILT litehtml-test_NOT_BUILT)
+endif()
