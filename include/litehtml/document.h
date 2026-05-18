@@ -49,6 +49,27 @@ namespace litehtml
 	public:
 		typedef std::shared_ptr<document>	ptr;
 		typedef std::weak_ptr<document>		weak_ptr;
+			struct perf_snapshot
+			{
+				size_t split_text_calls = 0;
+				size_t split_text_bytes = 0;
+				double split_text_ms = 0.0;
+			size_t whitespace_expand_calls = 0;
+			size_t whitespace_expand_bytes = 0;
+			double whitespace_expand_ms = 0.0;
+				size_t apply_stylesheet_calls = 0;
+				size_t selector_checks = 0;
+				size_t selector_fast_rejects = 0;
+				size_t selector_matches = 0;
+				size_t render_item_create_calls = 0;
+				size_t render_item_create_inline_text = 0;
+				size_t render_item_create_space = 0;
+				size_t render_item_create_inline = 0;
+				size_t render_item_create_block = 0;
+				size_t render_item_init_calls = 0;
+				size_t render_item_init_inline_text = 0;
+				size_t render_item_init_space = 0;
+			};
 	private:
 		std::shared_ptr<element>			m_root;
 		std::shared_ptr<render_item>		m_root_render;
@@ -70,6 +91,36 @@ namespace litehtml
 		string								m_culture;
 		string								m_text;
 		document_mode						m_mode = no_quirks_mode;
+		size_t								m_perf_element_count = 0;
+		size_t								m_perf_text_node_count = 0;
+		size_t								m_perf_text_fragment_count = 0;
+		size_t								m_perf_space_fragment_count = 0;
+		size_t								m_perf_whitespace_char_count = 0;
+		size_t								m_perf_stylesheet_count = 0;
+		size_t								m_perf_stylesheet_bytes = 0;
+		size_t								m_perf_split_text_calls = 0;
+		size_t								m_perf_split_text_bytes = 0;
+		double								m_perf_split_text_ms = 0.0;
+		size_t								m_perf_ascii_split_calls = 0;
+		size_t								m_perf_ascii_split_bytes = 0;
+		double								m_perf_ascii_split_ms = 0.0;
+		size_t								m_perf_whitespace_expand_calls = 0;
+		size_t								m_perf_whitespace_expand_bytes = 0;
+		double								m_perf_whitespace_expand_ms = 0.0;
+		size_t								m_perf_trailing_space_fold_count = 0;
+		size_t								m_perf_trailing_space_fold_bytes = 0;
+			size_t								m_perf_apply_stylesheet_calls = 0;
+			size_t								m_perf_selector_checks = 0;
+			size_t								m_perf_selector_fast_rejects = 0;
+			size_t								m_perf_selector_matches = 0;
+			size_t								m_perf_render_item_create_calls = 0;
+			size_t								m_perf_render_item_create_inline_text = 0;
+			size_t								m_perf_render_item_create_space = 0;
+			size_t								m_perf_render_item_create_inline = 0;
+			size_t								m_perf_render_item_create_block = 0;
+			size_t								m_perf_render_item_init_calls = 0;
+			size_t								m_perf_render_item_init_inline_text = 0;
+			size_t								m_perf_render_item_init_space = 0;
 	public:
 		document(document_container* objContainer);
 		virtual ~document();
@@ -103,7 +154,82 @@ namespace litehtml
 		bool							lang_changed();
 		bool							match_lang(const string& lang);
 		void							add_tabular(const std::shared_ptr<render_item>& el);
-		std::shared_ptr<const element>	get_over_element() const { return m_over_element; }
+		perf_snapshot					get_perf_snapshot() const
+		{
+			return {
+				m_perf_split_text_calls,
+				m_perf_split_text_bytes,
+				m_perf_split_text_ms,
+				m_perf_whitespace_expand_calls,
+				m_perf_whitespace_expand_bytes,
+					m_perf_whitespace_expand_ms,
+					m_perf_apply_stylesheet_calls,
+					m_perf_selector_checks,
+					m_perf_selector_fast_rejects,
+					m_perf_selector_matches,
+					m_perf_render_item_create_calls,
+					m_perf_render_item_create_inline_text,
+					m_perf_render_item_create_space,
+					m_perf_render_item_create_inline,
+					m_perf_render_item_create_block,
+					m_perf_render_item_init_calls,
+					m_perf_render_item_init_inline_text,
+					m_perf_render_item_init_space
+				};
+			}
+		void							perf_note_split_text(size_t bytes, double ms)
+		{
+			m_perf_split_text_calls++;
+			m_perf_split_text_bytes += bytes;
+			m_perf_split_text_ms += ms;
+		}
+		void							perf_note_ascii_split(size_t bytes, double ms)
+		{
+			m_perf_ascii_split_calls++;
+			m_perf_ascii_split_bytes += bytes;
+			m_perf_ascii_split_ms += ms;
+		}
+		void							perf_note_whitespace_expand(size_t bytes, double ms)
+		{
+			m_perf_whitespace_expand_calls++;
+			m_perf_whitespace_expand_bytes += bytes;
+			m_perf_whitespace_expand_ms += ms;
+		}
+		void							perf_note_apply_stylesheet_call()
+		{
+			m_perf_apply_stylesheet_calls++;
+		}
+			void							perf_note_selector_check(bool fast_rejected, bool matched)
+			{
+				m_perf_selector_checks++;
+				if (fast_rejected) m_perf_selector_fast_rejects++;
+				if (matched) m_perf_selector_matches++;
+			}
+			void							perf_note_render_item_created(style_display display, bool is_text, bool is_space)
+			{
+				m_perf_render_item_create_calls++;
+				if (is_text) m_perf_render_item_create_inline_text++;
+				if (is_space) m_perf_render_item_create_space++;
+				if (display == display_inline || display == display_inline_text)
+				{
+					m_perf_render_item_create_inline++;
+				}
+				if (display == display_block ||
+					display == display_table_cell ||
+					display == display_table_caption ||
+					display == display_list_item ||
+					display == display_inline_block)
+				{
+					m_perf_render_item_create_block++;
+				}
+			}
+			void							perf_note_render_item_init(bool is_text, bool is_space)
+			{
+				m_perf_render_item_init_calls++;
+				if (is_text) m_perf_render_item_init_inline_text++;
+				if (is_space) m_perf_render_item_init_space++;
+			}
+			std::shared_ptr<const element>	get_over_element() const { return m_over_element; }
 
 		void							append_children_from_string(element& parent, const char* str, bool replace_existing);
 		void							dump(dumper& cout);

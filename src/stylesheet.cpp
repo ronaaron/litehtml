@@ -7,6 +7,21 @@
 namespace litehtml
 {
 
+namespace
+{
+
+const css_attribute_selector* find_rightmost_attr(const css_element_selector& selector,
+												  attr_select_type type)
+{
+	for (const auto& attr : selector.m_attrs)
+	{
+		if (attr.type == type) return &attr;
+	}
+	return nullptr;
+}
+
+}
+
 // https://www.w3.org/TR/css-syntax-3/#parse-a-css-stylesheet
 template<class Input> // Input == string or css_token_vector
 void css::parse_css_stylesheet(const Input& input, string baseurl, document::ptr doc, media_query_list_list::ptr media, bool top_level)
@@ -138,6 +153,78 @@ void css::sort_selectors()
 			 return (*v1) < (*v2);
 		 }
 	);
+	rebuild_selector_index();
+}
+
+void css::collect_selector_lists(string_id tag,
+								 string_id id,
+								 const std::vector<string_id>& classes,
+								 std::vector<const css_selector::vector*>& out) const
+{
+	out.clear();
+	out.reserve(classes.size() + 3);
+
+	auto push_bucket = [&](const css_selector::vector* bucket)
+	{
+		if (!bucket || bucket->empty()) return;
+		if (std::find(out.begin(), out.end(), bucket) != out.end()) return;
+		out.push_back(bucket);
+	};
+
+	push_bucket(&m_universal_selectors);
+	if (id != empty_id)
+	{
+		push_bucket(find_bucket(m_id_selectors, id));
+	}
+	for (auto cls : classes)
+	{
+		push_bucket(find_bucket(m_class_selectors, cls));
+	}
+	if (tag != empty_id)
+	{
+		push_bucket(find_bucket(m_tag_selectors, tag));
+	}
+}
+
+void css::rebuild_selector_index()
+{
+	m_universal_selectors.clear();
+	m_tag_selectors.clear();
+	m_class_selectors.clear();
+	m_id_selectors.clear();
+
+	for (const auto& selector : m_selectors)
+	{
+		const css_attribute_selector* id_attr = find_rightmost_attr(selector->m_right, select_id);
+		if (id_attr)
+		{
+			m_id_selectors[id_attr->name].push_back(selector);
+			continue;
+		}
+
+		const css_attribute_selector* class_attr = find_rightmost_attr(selector->m_right, select_class);
+		if (class_attr)
+		{
+			m_class_selectors[class_attr->name].push_back(selector);
+			continue;
+		}
+
+		if (selector->m_right.m_tag != star_id)
+		{
+			m_tag_selectors[selector->m_right.m_tag].push_back(selector);
+			continue;
+		}
+
+		m_universal_selectors.push_back(selector);
+	}
+}
+
+const css_selector::vector* css::find_bucket(const std::map<string_id, css_selector::vector>& buckets,
+											 string_id key) const
+{
+	auto it = buckets.find(key);
+	if (it == buckets.end()) return nullptr;
+	return &it->second;
 }
 
 } // namespace litehtml

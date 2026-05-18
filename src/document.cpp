@@ -27,9 +27,85 @@
 #include "render_block.h"
 #include "document_container.h"
 #include "types.h"
+#include "app/PerfTrace.h"
 
 namespace litehtml
 {
+
+namespace
+{
+
+struct text_scan_result
+{
+	size_t len = 0;
+	bool ascii_only = true;
+};
+
+text_scan_result scan_text(const char* text)
+{
+	text_scan_result result;
+	if (!text) return result;
+
+	for (const unsigned char* p = reinterpret_cast<const unsigned char*>(text); *p; ++p)
+	{
+		result.len++;
+		if (*p & 0x80) result.ascii_only = false;
+	}
+	return result;
+}
+
+inline bool is_ascii_horizontal_space(unsigned char ch)
+{
+	return ch == ' ' || ch == '\t' || ch == '\r' || ch == '\f';
+}
+
+template<typename WordCallback, typename SpaceCallback>
+void split_ascii_text(const char* text, const WordCallback& on_word, const SpaceCallback& on_space)
+{
+	const char* segment_start = text;
+	const char* p = text;
+	while (*p)
+	{
+		unsigned char ch = static_cast<unsigned char>(*p);
+		if (ch == '\n')
+		{
+			if (p > segment_start)
+			{
+				on_word(segment_start, static_cast<size_t>(p - segment_start));
+			}
+			on_space(p, 1);
+			++p;
+			segment_start = p;
+			continue;
+		}
+
+		if (is_ascii_horizontal_space(ch))
+		{
+			if (p > segment_start)
+			{
+				on_word(segment_start, static_cast<size_t>(p - segment_start));
+			}
+			const char* space_start = p;
+			do
+			{
+				++p;
+				ch = static_cast<unsigned char>(*p);
+			} while (*p && is_ascii_horizontal_space(ch));
+			on_space(space_start, static_cast<size_t>(p - space_start));
+			segment_start = p;
+			continue;
+		}
+
+		++p;
+	}
+
+	if (p > segment_start)
+	{
+		on_word(segment_start, static_cast<size_t>(p - segment_start));
+	}
+}
+
+}
 
 document::document(document_container* container)
 {
@@ -54,11 +130,16 @@ document::ptr document::createFromString(
 	const string& master_styles,
 	const string& user_styles )
 {
+	verdad::perf::ScopeTimer timer("litehtml::document::createFromString");
+	verdad::perf::StepTimer step;
+
 	// Create litehtml::document
 	document::ptr doc = make_shared<document>(container);
 
 	// Parse document into GumboOutput
 	GumboOutput* output = doc->parse_html(str);
+	verdad::perf::logf("litehtml::document::createFromString parse_html: %.3f ms", step.elapsedMs());
+	step.reset();
 
 	// mode must be set before doc->create_node because it is used in html_tag::set_attr
 	switch (output->document->v.document.doc_type_quirks_mode)
@@ -67,6 +148,7 @@ document::ptr document::createFromString(
 	case GUMBO_DOCTYPE_QUIRKS:         doc->m_mode = quirks_mode;         break;
 	case GUMBO_DOCTYPE_LIMITED_QUIRKS: doc->m_mode = limited_quirks_mode; break;
 	}
+	verdad::perf::logf("litehtml::document::createFromString doc_mode=%d", static_cast<int>(doc->m_mode));
 
 	// Create litehtml::elements.
 	elements_list root_elements;
@@ -75,33 +157,103 @@ document::ptr document::createFromString(
 	{
 		doc->m_root = root_elements.back();
 	}
+	verdad::perf::logf(
+		"litehtml::document::createFromString create_node: %.3f ms (elements=%zu textNodes=%zu textFragments=%zu spaceFragments=%zu foldedSpaceRuns=%zu foldedSpaceBytes=%zu whitespaceChars=%zu asciiSplitCalls=%zu asciiSplitBytes=%zu asciiSplitMs=%.3f splitTextCalls=%zu splitTextBytes=%zu splitTextMs=%.3f whitespaceRuns=%zu whitespaceBytes=%zu whitespaceMs=%.3f)",
+		step.elapsedMs(),
+		doc->m_perf_element_count,
+		doc->m_perf_text_node_count,
+		doc->m_perf_text_fragment_count,
+		doc->m_perf_space_fragment_count,
+		doc->m_perf_trailing_space_fold_count,
+		doc->m_perf_trailing_space_fold_bytes,
+		doc->m_perf_whitespace_char_count,
+		doc->m_perf_ascii_split_calls,
+		doc->m_perf_ascii_split_bytes,
+		doc->m_perf_ascii_split_ms,
+		doc->m_perf_split_text_calls,
+		doc->m_perf_split_text_bytes,
+		doc->m_perf_split_text_ms,
+		doc->m_perf_whitespace_expand_calls,
+		doc->m_perf_whitespace_expand_bytes,
+		doc->m_perf_whitespace_expand_ms);
+	step.reset();
 
 	// Destroy GumboOutput
 	gumbo_destroy_output(&kGumboDefaultOptions, output);
+	verdad::perf::logf("litehtml::document::createFromString gumbo_destroy_output: %.3f ms", step.elapsedMs());
+	step.reset();
 
-	if (master_styles != "")
-	{
-		doc->m_master_css.parse_css_stylesheet(master_styles, "", doc);
-		doc->m_master_css.sort_selectors();
-	}
-	if (user_styles != "")
-	{
-		doc->m_user_css.parse_css_stylesheet(user_styles, "", doc);
-		doc->m_user_css.sort_selectors();
-	}
+	// Cache pre-parsed CSS objects to avoid reparsing identical stylesheets.
+	// The css class is implicitly copyable (vectors of shared_ptr<css_selector>).
+	struct css_cache_entry {
+		string text;
+		litehtml::css parsed;
+	};
+	static std::vector<css_cache_entry> s_css_cache;
+
+	auto find_or_parse_css = [&](const string& css_text, litehtml::css& target) {
+		if (css_text.empty()) return;
+		for (const auto& entry : s_css_cache) {
+			if (entry.text == css_text) {
+				target = entry.parsed;
+				return;
+			}
+		}
+		target.parse_css_stylesheet(css_text, "", doc);
+		target.sort_selectors();
+		if (s_css_cache.size() >= 8) {
+			s_css_cache.erase(s_css_cache.begin());
+		}
+		s_css_cache.push_back({css_text, target});
+	};
+
+	find_or_parse_css(master_styles, doc->m_master_css);
+	verdad::perf::logf("litehtml::document::createFromString master_css: %.3f ms", step.elapsedMs());
+	step.reset();
+
+	find_or_parse_css(user_styles, doc->m_user_css);
+	verdad::perf::logf("litehtml::document::createFromString user_css: %.3f ms", step.elapsedMs());
+	step.reset();
 
 	// Let's process created elements tree
 	if (doc->m_root)
 	{
 		doc->container()->get_media_features(doc->m_media);
+		verdad::perf::logf("litehtml::document::createFromString get_media_features: %.3f ms", step.elapsedMs());
+		step.reset();
 
 		doc->m_root->set_pseudo_class(_root_, true);
+		verdad::perf::logf("litehtml::document::createFromString set_root_pseudo: %.3f ms", step.elapsedMs());
+		step.reset();
+
+		auto log_apply_stage = [&](const char* label,
+		                           const document::perf_snapshot& before)
+		{
+			perf_snapshot after = doc->get_perf_snapshot();
+			verdad::perf::logf(
+				"litehtml::document::createFromString %s: %.3f ms (calls=%zu selectorChecks=%zu fastRejects=%zu matches=%zu)",
+				label,
+				step.elapsedMs(),
+				after.apply_stylesheet_calls - before.apply_stylesheet_calls,
+				after.selector_checks - before.selector_checks,
+				after.selector_fast_rejects - before.selector_fast_rejects,
+				after.selector_matches - before.selector_matches);
+			step.reset();
+		};
 
 		// apply master CSS
+		document::perf_snapshot before_apply = doc->get_perf_snapshot();
 		doc->m_root->apply_stylesheet(doc->m_master_css);
+		log_apply_stage("apply_master_css", before_apply);
 
 		// parse elements attributes
 		doc->m_root->parse_attributes();
+		verdad::perf::logf(
+			"litehtml::document::createFromString parse_attributes: %.3f ms (stylesheets=%zu cssBytes=%zu)",
+			step.elapsedMs(),
+			doc->m_perf_stylesheet_count,
+			doc->m_perf_stylesheet_bytes);
+		step.reset();
 
 		// parse style sheets linked in document
 		for (const auto& css : doc->m_css)
@@ -115,36 +267,70 @@ document::ptr document::createFromString(
 			}
 			doc->m_styles.parse_css_stylesheet(css.text, css.baseurl, doc, media);
 		}
+		verdad::perf::logf("litehtml::document::createFromString parse_linked_css: %.3f ms", step.elapsedMs());
+		step.reset();
+
 		// Sort css selectors using CSS rules.
 		doc->m_styles.sort_selectors();
+		verdad::perf::logf("litehtml::document::createFromString sort_linked_css: %.3f ms", step.elapsedMs());
+		step.reset();
 
 		// Apply media features.
 		doc->update_media_lists(doc->m_media);
+		verdad::perf::logf("litehtml::document::createFromString update_media_lists: %.3f ms", step.elapsedMs());
+		step.reset();
 
 		// Apply parsed styles.
+		before_apply = doc->get_perf_snapshot();
 		doc->m_root->apply_stylesheet(doc->m_styles);
+		log_apply_stage("apply_document_css", before_apply);
 
 		// Apply user styles if any
+		before_apply = doc->get_perf_snapshot();
 		doc->m_root->apply_stylesheet(doc->m_user_css);
+		log_apply_stage("apply_user_css", before_apply);
 
 		// Initialize element::m_css
 		doc->m_root->compute_styles();
+		verdad::perf::logf("litehtml::document::createFromString compute_styles: %.3f ms", step.elapsedMs());
+		step.reset();
 
-		// Create rendering tree
-		doc->m_root_render = doc->m_root->create_render_item(nullptr);
+			// Create rendering tree
+			document::perf_snapshot before_render = doc->get_perf_snapshot();
+			doc->m_root_render = doc->m_root->create_render_item(nullptr);
+			perf_snapshot after_render = doc->get_perf_snapshot();
+			verdad::perf::logf(
+				"litehtml::document::createFromString create_render_item: %.3f ms (created=%zu inlineText=%zu spaces=%zu inline=%zu block=%zu)",
+				step.elapsedMs(),
+				after_render.render_item_create_calls - before_render.render_item_create_calls,
+				after_render.render_item_create_inline_text - before_render.render_item_create_inline_text,
+				after_render.render_item_create_space - before_render.render_item_create_space,
+				after_render.render_item_create_inline - before_render.render_item_create_inline,
+				after_render.render_item_create_block - before_render.render_item_create_block);
+			step.reset();
 
 		// Now the m_tabular_elements is filled with tabular elements.
 		// We have to check the tabular elements for missing table elements
 		// and create the anonymous boxes in visual table layout
 		doc->fix_tables_layout();
+		verdad::perf::logf("litehtml::document::createFromString fix_tables_layout: %.3f ms", step.elapsedMs());
+		step.reset();
 
-		// Finally initialize elements
-		// init() returns pointer to the render_init element because it can change its type
-		if(doc->m_root_render)
-		{
-			doc->m_root_render = doc->m_root_render->init();
+			// Finally initialize elements
+			before_render = doc->get_perf_snapshot();
+			// init() returns pointer to the render_init element because it can change its type
+			if(doc->m_root_render)
+			{
+				doc->m_root_render = doc->m_root_render->init();
+			}
+			after_render = doc->get_perf_snapshot();
+			verdad::perf::logf(
+				"litehtml::document::createFromString render_init: %.3f ms (calls=%zu inlineText=%zu spaces=%zu)",
+				step.elapsedMs(),
+				after_render.render_item_init_calls - before_render.render_item_init_calls,
+				after_render.render_item_init_inline_text - before_render.render_item_init_inline_text,
+				after_render.render_item_init_space - before_render.render_item_init_space);
 		}
-	}
 
 	return doc;
 }
@@ -216,43 +402,62 @@ encoding get_meta_encoding(GumboNode* root)
 // substitute for gumbo_parse that handles encodings
 GumboOutput* document::parse_html(estring str)
 {
+	verdad::perf::ScopeTimer timer("litehtml::document::parse_html");
+	verdad::perf::StepTimer step;
+
 	// https://html.spec.whatwg.org/multipage/parsing.html#the-input-byte-stream
 	encoding_sniffing_algorithm(str);
+	verdad::perf::logf("litehtml::document::parse_html sniff_encoding: %.3f ms", step.elapsedMs());
+	step.reset();
 	// cannot store output in local variable because gumbo keeps pointers into it,
 	// which will be accessed later in gumbo_tag_from_original_text
 	if (str.encoding == encoding::utf_8)
 		m_text = str;
 	else
 		decode(str, str.encoding, m_text);
+	verdad::perf::logf("litehtml::document::parse_html decode_initial: %.3f ms", step.elapsedMs());
+	step.reset();
 
 	// Gumbo does not support callbacks on node creation, so we cannot change encoding while parsing.
 	// Instead, we parse entire file and then handle <meta> tags.
 
 	// Using gumbo_parse_with_options to pass string length (m_text may contain NUL chars).
 	GumboOutput* output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+	verdad::perf::logf("litehtml::document::parse_html gumbo_parse_initial: %.3f ms", step.elapsedMs());
 
 	if (str.confidence == confidence::certain)
 		return output;
 
 	// Otherwise: confidence is tentative.
+	step.reset();
 
 	// If valid HTML encoding is specified in <meta> tag...
 	encoding meta_encoding = get_meta_encoding(output->root);
+	verdad::perf::logf("litehtml::document::parse_html get_meta_encoding: %.3f ms", step.elapsedMs());
 	if (meta_encoding != encoding::null)
 	{
 		// ...and it is different from currently used encoding...
 		encoding new_encoding = adjust_meta_encoding(meta_encoding, str.encoding);
+		verdad::perf::logf(
+			"litehtml::document::parse_html meta_encoding initial=%d meta=%d adjusted=%d",
+			static_cast<int>(str.encoding),
+			static_cast<int>(meta_encoding),
+			static_cast<int>(new_encoding));
 		if (new_encoding != str.encoding)
 		{
 			// ...reparse with the new encoding.
 			gumbo_destroy_output(&kGumboDefaultOptions, output);
 			m_text.clear();
 
+			step.reset();
 			if (new_encoding == encoding::utf_8)
 				m_text = str;
 			else
 				decode(str, new_encoding, m_text);
+			verdad::perf::logf("litehtml::document::parse_html decode_reparse: %.3f ms", step.elapsedMs());
+			step.reset();
 			output = gumbo_parse_with_options(&kGumboDefaultOptions, m_text.data(), m_text.size());
+			verdad::perf::logf("litehtml::document::parse_html gumbo_parse_reparse: %.3f ms", step.elapsedMs());
 		}
 	}
 
@@ -262,6 +467,59 @@ GumboOutput* document::parse_html(estring str)
 void document::create_node(void* gnode, elements_list& elements, bool parseTextNode, bool process_root)
 {
 	auto* node = (GumboNode*)gnode;
+	document::ptr this_doc = shared_from_this();
+	auto append_text_fragment = [this, &elements, &this_doc](const char* text)
+	{
+		elements.push_back(std::make_shared<el_text>(text, this_doc));
+		m_perf_text_fragment_count++;
+	};
+	auto append_text_fragment_range = [this, &elements, &this_doc](const char* text, size_t len)
+	{
+		if (!len) return;
+		elements.push_back(std::make_shared<el_text>(text, len, this_doc));
+		m_perf_text_fragment_count++;
+	};
+	auto append_space_fragment = [this, &elements, &this_doc](const char* text)
+	{
+		const size_t text_len = text ? std::strlen(text) : 0;
+		bool is_line_break = text && text[0] == '\n' && text[1] == '\0';
+		if (!is_line_break && !elements.empty())
+		{
+			auto& last = elements.back();
+			if (last && last->is_text() && !last->is_space())
+			{
+				auto last_text = std::static_pointer_cast<el_text>(last);
+				last_text->append_trailing_space(text);
+				m_perf_trailing_space_fold_count++;
+				m_perf_trailing_space_fold_bytes += text_len;
+				return;
+			}
+		}
+
+		elements.push_back(std::make_shared<el_space>(text, this_doc));
+		m_perf_space_fragment_count++;
+	};
+	auto append_space_fragment_range = [this, &elements, &this_doc](const char* text, size_t len)
+	{
+		if (!text || !len) return;
+		bool is_line_break = len == 1 && text[0] == '\n';
+		if (!is_line_break && !elements.empty())
+		{
+			auto& last = elements.back();
+			if (last && last->is_text() && !last->is_space())
+			{
+				auto last_text = std::static_pointer_cast<el_text>(last);
+				last_text->append_trailing_space(text, len);
+				m_perf_trailing_space_fold_count++;
+				m_perf_trailing_space_fold_bytes += len;
+				return;
+			}
+		}
+
+		elements.push_back(std::make_shared<el_space>(text, len, this_doc));
+		m_perf_space_fragment_count++;
+	};
+
 	switch (node->type)
 	{
 	case GUMBO_NODE_ELEMENT:
@@ -299,17 +557,13 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 			}
 			if (ret)
 			{
+				m_perf_element_count++;
 				elements_list child;
 				for (unsigned int i = 0; i < node->v.element.children.length; i++)
 				{
 					child.clear();
 					create_node(static_cast<GumboNode*> (node->v.element.children.data[i]), child, parseTextNode, true);
-					std::for_each(child.begin(), child.end(),
-						[&ret](element::ptr& el)
-						{
-							ret->appendChild(el);
-						}
-					);
+					ret->appendChildren(child);
 				}
 				elements.push_back(ret);
 			}
@@ -324,15 +578,27 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 	break;
 	case GUMBO_NODE_TEXT:
 	{
+		m_perf_text_node_count++;
 		if (!parseTextNode)
 		{
-			elements.push_back(std::make_shared<el_text>(node->v.text.text, shared_from_this()));
+			append_text_fragment(node->v.text.text);
 		}
 		else
 		{
-			m_container->split_text(node->v.text.text,
-				[this, &elements](const char* text) { elements.push_back(std::make_shared<el_text>(text, shared_from_this())); },
-				[this, &elements](const char* text) { elements.push_back(std::make_shared<el_space>(text, shared_from_this())); });
+			const auto scan = scan_text(node->v.text.text);
+			verdad::perf::StepTimer split_timer;
+			if (scan.ascii_only)
+			{
+				split_ascii_text(node->v.text.text, append_text_fragment_range, append_space_fragment_range);
+				perf_note_ascii_split(scan.len, split_timer.elapsedMs());
+			}
+			else
+			{
+				m_container->split_text(node->v.text.text,
+					append_text_fragment,
+					append_space_fragment);
+				perf_note_split_text(scan.len, split_timer.elapsedMs());
+			}
 		}
 	}
 	break;
@@ -352,11 +618,21 @@ void document::create_node(void* gnode, elements_list& elements, bool parseTextN
 	break;
 	case GUMBO_NODE_WHITESPACE:
 	{
-		string str = node->v.text.text;
-		for (size_t i = 0; i < str.length(); i++)
+		const auto scan = scan_text(node->v.text.text);
+		m_perf_whitespace_char_count += scan.len;
+		verdad::perf::StepTimer split_timer;
+		if (scan.ascii_only)
 		{
-			elements.push_back(std::make_shared<el_space>(str.substr(i, 1).c_str(), shared_from_this()));
+			split_ascii_text(node->v.text.text, append_text_fragment_range, append_space_fragment_range);
+			perf_note_ascii_split(scan.len, split_timer.elapsedMs());
 		}
+		else
+		{
+			m_container->split_text(node->v.text.text,
+				append_text_fragment,
+				append_space_fragment);
+		}
+		perf_note_whitespace_expand(scan.len, split_timer.elapsedMs());
 	}
 	break;
 	default:
@@ -497,6 +773,8 @@ uint_ptr document::get_font( const font_description& descr, font_metrics* fm )
 
 pixel_t document::render( pixel_t max_width, render_type rt )
 {
+	verdad::perf::ScopeTimer timer("litehtml::document::render");
+	verdad::perf::StepTimer step;
 	pixel_t ret = 0;
 	if(m_root && m_root_render)
 	{
@@ -512,17 +790,30 @@ pixel_t document::render( pixel_t max_width, render_type rt )
 		{
 			m_fixed_boxes.clear();
 			m_root_render->render_positioned(rt);
+			verdad::perf::logf("litehtml::document::render render_positioned_only: %.3f ms", step.elapsedMs());
 		} else
 		{
 			ret = m_root_render->render(0, 0, cb_context, nullptr);
-			if(m_root_render->fetch_positioned())
+			verdad::perf::logf("litehtml::document::render layout_tree: %.3f ms", step.elapsedMs());
+			step.reset();
+
+			const bool hasPositioned = m_root_render->fetch_positioned();
+			verdad::perf::logf("litehtml::document::render fetch_positioned: %.3f ms (hasPositioned=%d)",
+				step.elapsedMs(),
+				hasPositioned ? 1 : 0);
+			step.reset();
+
+			if(hasPositioned)
 			{
 				m_fixed_boxes.clear();
 				m_root_render->render_positioned(rt);
+				verdad::perf::logf("litehtml::document::render render_positioned: %.3f ms", step.elapsedMs());
+				step.reset();
 			}
 			m_size.width	= 0;
 			m_size.height	= 0;
 			m_root_render->calc_document_size(m_size);
+			verdad::perf::logf("litehtml::document::render calc_document_size: %.3f ms", step.elapsedMs());
 		}
 	}
 	return ret;
@@ -625,6 +916,8 @@ void document::add_stylesheet( const char* str, const char* baseurl, const char*
 	if(str && str[0])
 	{
 		m_css.emplace_back(str, baseurl, media);
+		m_perf_stylesheet_count++;
+		m_perf_stylesheet_bytes += strlen(str);
 	}
 }
 

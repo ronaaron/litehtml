@@ -159,11 +159,16 @@ std::shared_ptr<render_item> element::create_render_item(const std::shared_ptr<r
 	{
 		ret = std::make_shared<render_item_flex>(shared_from_this());
 	}
-	if(ret)
-	{
-		if (css().get_display() == display_table ||
-			css().get_display() == display_inline_table ||
-			css().get_display() == display_table_caption ||
+		if(ret)
+		{
+			if (auto doc = get_document())
+			{
+				doc->perf_note_render_item_created(css().get_display(), is_text(), is_space());
+			}
+
+			if (css().get_display() == display_table ||
+				css().get_display() == display_inline_table ||
+				css().get_display() == display_table_caption ||
 			css().get_display() == display_table_cell ||
 			css().get_display() == display_table_column ||
 			css().get_display() == display_table_column_group ||
@@ -462,6 +467,14 @@ bool element::is_nth_last_child(const element::ptr& /*el*/, int /*num*/, int /*o
 bool element::is_nth_child(const element::ptr&, int /*num*/, int /*off*/, bool /*of_type*/, const css_selector::vector& /*selector_list*/) const LITEHTML_RETURN_FUNC(false)
 bool element::is_only_child(const element::ptr& /*el*/, bool /*of_type*/) const		LITEHTML_RETURN_FUNC(false)
 void element::get_content_size( size& /*sz*/, pixel_t /*max_width*/ )				LITEHTML_EMPTY_FUNC
+void element::appendChildren(elements_list& children)
+{
+	for (const auto& child : children)
+	{
+		appendChild(child);
+	}
+	children.clear();
+}
 bool element::appendChild(const ptr &/*el*/)										LITEHTML_RETURN_FUNC(false)
 bool element::removeChild(const ptr &/*el*/)										LITEHTML_RETURN_FUNC(false)
 void element::clearRecursive()														LITEHTML_EMPTY_FUNC
@@ -482,6 +495,9 @@ bool element::is_comment() const													LITEHTML_RETURN_FUNC(false)
 bool element::is_body() const														LITEHTML_RETURN_FUNC(false)
 bool element::is_break() const														LITEHTML_RETURN_FUNC(false)
 bool element::is_text() const														LITEHTML_RETURN_FUNC(false)
+bool element::has_trailing_white_space() const										LITEHTML_RETURN_FUNC(false)
+pixel_t element::trim_trailing_white_space()										LITEHTML_RETURN_FUNC(0)
+void element::restore_trailing_white_space()										LITEHTML_EMPTY_FUNC
 
 bool element::on_mouse_over()														LITEHTML_RETURN_FUNC(false)
 bool element::on_mouse_leave()														LITEHTML_RETURN_FUNC(false)

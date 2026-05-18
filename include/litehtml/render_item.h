@@ -27,6 +27,9 @@ namespace litehtml
         margins						                m_borders;
         position					                m_pos;
         bool                                        m_skip;
+        bool                                        m_zero_outlines = false;
+        bool                                        m_has_positioned_descendants = false;
+        bool                                        m_has_absolute_or_fixed_descendants = false;
         std::vector<std::shared_ptr<render_item>>   m_positioned;
     	std::shared_ptr<scroll_view>				m_scroll_view;
 
@@ -115,31 +118,37 @@ namespace litehtml
 
         pixel_t right() const
         {
+            if (m_zero_outlines) return m_pos.right();
             return left() + width();
         }
 
         pixel_t left() const
         {
+            if (m_zero_outlines) return m_pos.left();
             return m_pos.left() - m_margins.left - m_padding.left - m_borders.left;
         }
 
         pixel_t top() const
         {
+            if (m_zero_outlines) return m_pos.top();
             return m_pos.top() - m_margins.top - m_padding.top - m_borders.top;
         }
 
         pixel_t bottom() const
         {
+            if (m_zero_outlines) return m_pos.bottom();
             return top() + height();
         }
 
         pixel_t height() const
         {
+            if (m_zero_outlines) return m_pos.height;
             return m_pos.height + m_margins.height() + m_padding.height() + m_borders.height();
         }
 
         pixel_t width() const
         {
+            if (m_zero_outlines) return m_pos.width;
             return m_pos.width + m_margins.width() + m_padding.width() + m_borders.width();
         }
 
@@ -233,6 +242,7 @@ namespace litehtml
 		 */
         pixel_t content_offset_top() const
         {
+            if (m_zero_outlines) return 0;
             return m_margins.top + m_padding.top + m_borders.top;
         }
 
@@ -241,6 +251,7 @@ namespace litehtml
 		 */
         pixel_t content_offset_bottom() const
         {
+            if (m_zero_outlines) return 0;
             return m_margins.bottom + m_padding.bottom + m_borders.bottom;
         }
 
@@ -249,6 +260,7 @@ namespace litehtml
 		 */
         pixel_t content_offset_left() const
         {
+            if (m_zero_outlines) return 0;
             return m_margins.left + m_padding.left + m_borders.left;
         }
 
@@ -257,6 +269,7 @@ namespace litehtml
 		 */
         pixel_t content_offset_right() const
         {
+            if (m_zero_outlines) return 0;
             return m_margins.right + m_padding.right + m_borders.right;
         }
 
@@ -265,6 +278,7 @@ namespace litehtml
 		 */
         pixel_t content_offset_width() const
         {
+            if (m_zero_outlines) return 0;
             return content_offset_left() + content_offset_right();
         }
 
@@ -273,11 +287,13 @@ namespace litehtml
 		 */
         pixel_t content_offset_height() const
         {
+            if (m_zero_outlines) return 0;
             return content_offset_top() + content_offset_bottom();
         }
 
 		pixel_t render_offset_left() const
 		{
+			if (m_zero_outlines) return 0;
 			if(css().get_box_sizing() == box_sizing_content_box)
 			{
 				return m_margins.left + m_borders.left + m_padding.left;
@@ -287,6 +303,7 @@ namespace litehtml
 
 		pixel_t render_offset_right() const
 		{
+			if (m_zero_outlines) return 0;
 			if(css().get_box_sizing() == box_sizing_content_box)
 			{
 				return m_margins.right + m_borders.right + m_padding.right;
@@ -296,6 +313,7 @@ namespace litehtml
 
 		pixel_t render_offset_width() const
 		{
+			if (m_zero_outlines) return 0;
 			return render_offset_left() + render_offset_right();
 		}
 
@@ -387,6 +405,18 @@ namespace litehtml
         {
             m_children.push_back(ri);
             ri->parent(shared_from_this());
+
+            const auto position = ri->src_el()->css().get_position();
+            if (position != element_position_static || ri->m_has_positioned_descendants)
+            {
+                m_has_positioned_descendants = true;
+            }
+            if (position == element_position_absolute ||
+                position == element_position_fixed ||
+                ri->m_has_absolute_or_fixed_descendants)
+            {
+                m_has_absolute_or_fixed_descendants = true;
+            }
         }
 
 		bool is_root() const

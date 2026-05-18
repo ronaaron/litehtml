@@ -16,6 +16,72 @@
 namespace litehtml
 {
 
+namespace
+{
+
+const css_selector::ptr* next_candidate_selector(
+	const std::vector<const css_selector::vector*>& selector_lists,
+	std::vector<size_t>& positions)
+{
+	const css_selector::ptr* next = nullptr;
+	size_t next_list = 0;
+
+	for (size_t i = 0; i < selector_lists.size(); ++i)
+	{
+		const auto* selectors = selector_lists[i];
+		size_t pos = positions[i];
+		if (!selectors || pos >= selectors->size()) continue;
+
+		const css_selector::ptr* candidate = &(*selectors)[pos];
+		if (!next || (**candidate) < (**next))
+		{
+			next = candidate;
+			next_list = i;
+		}
+	}
+
+	if (!next) return nullptr;
+	positions[next_list]++;
+	return next;
+}
+
+bool rightmost_prefilter_reject(const css_selector& selector,
+								   string_id tag,
+								   string_id id,
+								   const std::vector<string_id>& classes)
+{
+	const auto& right = selector.m_right;
+	if (right.m_tag != star_id && right.m_tag != tag)
+	{
+		return true;
+	}
+
+	for (const auto& attr : right.m_attrs)
+	{
+		switch (attr.type)
+		{
+		case select_class:
+			if (!(attr.name in classes))
+			{
+				return true;
+			}
+			break;
+		case select_id:
+			if (attr.name != id)
+			{
+				return true;
+			}
+			break;
+		default:
+			break;
+		}
+	}
+
+	return false;
+}
+
+}
+
 litehtml::html_tag::html_tag(const std::shared_ptr<document>& doc) : element(doc)
 {
 	m_tag = empty_id;
@@ -42,6 +108,21 @@ bool litehtml::html_tag::appendChild(const element::ptr &el)
 		return true;
 	}
 	return false;
+}
+
+void litehtml::html_tag::appendChildren(elements_list& children)
+{
+	if (children.empty())
+	{
+		return;
+	}
+
+	element::ptr self = shared_from_this();
+	for (const auto& child : children)
+	{
+		child->parent(self);
+	}
+	m_children.splice(m_children.end(), children);
 }
 
 bool litehtml::html_tag::removeChild(const element::ptr &el)
@@ -181,23 +262,32 @@ litehtml::element::ptr litehtml::html_tag::select_one( const css_selector& selec
 
 void litehtml::html_tag::apply_stylesheet( const litehtml::css& stylesheet )
 {
-	for(const auto& sel : stylesheet.selectors())
+	document::ptr doc = get_document();
+	if (doc)
 	{
-		// optimization
-		{
-			const auto& r = sel->m_right;
-			if (r.m_tag != star_id && r.m_tag != m_tag)
-				continue;
+		doc->perf_note_apply_stylesheet_call();
+	}
 
-			if (!r.m_attrs.empty())
+	std::vector<const css_selector::vector*> selector_lists;
+	stylesheet.collect_selector_lists(m_tag, m_id, m_classes, selector_lists);
+	std::vector<size_t> selector_positions(selector_lists.size(), 0);
+
+	while (const css_selector::ptr* sel_ptr = next_candidate_selector(selector_lists, selector_positions))
+	{
+		const auto& sel = *sel_ptr;
+		{
+			if (rightmost_prefilter_reject(*sel, m_tag, m_id, m_classes))
 			{
-				const auto& attr = r.m_attrs[0];
-				if (attr.type == select_class && !(attr.name in m_classes))
-					continue;
+				if (doc) doc->perf_note_selector_check(true, false);
+				continue;
 			}
 		}
 
 		int apply = select(*sel, false);
+		if (doc)
+		{
+			doc->perf_note_selector_check(false, apply != select_no_match);
+		}
 
 		if(apply != select_no_match)
 		{
@@ -349,7 +439,10 @@ void litehtml::html_tag::compute_styles(bool recursive)
 		m_style.add(style, "", doc->container());
 	}
 
-	m_style.subst_vars(this);
+	if (m_style.has_vars())
+	{
+		m_style.subst_vars(this);
+	}
 
 	m_css.compute(this, doc);
 

@@ -1,6 +1,9 @@
 #ifndef LH_STYLESHEET_H
 #define LH_STYLESHEET_H
 
+#include <map>
+#include <vector>
+
 #include "css_selector.h"
 #include "css_tokenizer.h"
 
@@ -40,33 +43,42 @@ public:
 	css_token block;
 };
 
-class css
-{
-	css_selector::vector	m_selectors;
-public:
-
+	class css
+	{
+	public:
 	const css_selector::vector& selectors() const
 	{
 		return m_selectors;
 	}
 
-	template<class Input>
-	void	parse_css_stylesheet(const Input& input, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media = nullptr, bool top_level = true);
+		template<class Input>
+		void	parse_css_stylesheet(const Input& input, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media = nullptr, bool top_level = true);
 
-	void	sort_selectors();
+		void	sort_selectors();
+		void	collect_selector_lists(string_id tag,
+									string_id id,
+									const std::vector<string_id>& classes,
+									std::vector<const css_selector::vector*>& out) const;
 
-private:
-	bool	parse_style_rule(raw_rule::ptr rule, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media);
-	void	parse_import_rule(raw_rule::ptr rule, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media);
-	void	add_selector(const css_selector::ptr& selector);
-};
+	private:
+		css_selector::vector	m_selectors;
+		css_selector::vector	m_universal_selectors;
+		std::map<string_id, css_selector::vector> m_tag_selectors;
+		std::map<string_id, css_selector::vector> m_class_selectors;
+		std::map<string_id, css_selector::vector> m_id_selectors;
+		bool	parse_style_rule(raw_rule::ptr rule, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media);
+		void	parse_import_rule(raw_rule::ptr rule, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media);
+		void	add_selector(const css_selector::ptr& selector);
+		void	rebuild_selector_index();
+		const css_selector::vector* find_bucket(const std::map<string_id, css_selector::vector>& buckets,
+												string_id key) const;
+	};
 
 inline void css::add_selector(const css_selector::ptr& selector)
 {
 	selector->m_order = (int)m_selectors.size();
 	m_selectors.push_back(selector);
 }
-
 
 } // namespace litehtml
 

@@ -9,6 +9,11 @@ namespace litehtml
 	{
 	}
 
+	void el_table::appendChildren(elements_list& children)
+	{
+		element::appendChildren(children);
+	}
+
 	bool el_table::appendChild(const element::ptr& el)
 	{
 		if(!el) return false;

@@ -69,7 +69,7 @@ namespace litehtml
 		virtual void				get_media_features(litehtml::media_features& media) const = 0;
 		virtual void				get_language(litehtml::string& language, litehtml::string& culture) const = 0;
 		virtual litehtml::string	resolve_color(const litehtml::string& /*color*/) const { return litehtml::string(); }
-		virtual void				split_text(const char* text, const std::function<void(const char*)>& on_word, const std::function<void(const char*)>& on_space);
+			virtual void				split_text(const char* text, const std::function<void(const char*)>& on_word, const std::function<void(const char*)>& on_space);
 
 	protected:
 		virtual ~document_container() = default;

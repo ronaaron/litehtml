@@ -270,6 +270,7 @@ void litehtml::render_item_inline_context::place_inline(std::unique_ptr<line_box
 
 	if(item->get_type() == line_box_item::type_text_part)
 	{
+		item->get_el()->src_el()->restore_trailing_white_space();
 		if(item->get_el()->src_el()->is_inline_box())
 		{
 			pixel_t min_rendered_width = item->get_el()->render(line_ctx.left, line_ctx.top, self_size.new_width(line_ctx.right), fmt_ctx);

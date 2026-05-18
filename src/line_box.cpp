@@ -232,6 +232,10 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 					m_width -= m_items.back()->width();
 					m_items.back()->get_el()->skip(true);
 					m_items.pop_back();
+				} else if (pixel_t trimmed = m_items.back()->get_el()->src_el()->trim_trailing_white_space())
+				{
+					m_width -= trimmed;
+					break;
 				} else
 				{
 					break;
@@ -278,6 +282,24 @@ std::list< std::unique_ptr<litehtml::line_box_item> > litehtml::line_box::finish
 					}
 					// erase white space element
 					iter = decltype(iter) (m_items.erase( std::next(iter).base() ));
+				} else if (pixel_t trimmed = (*iter)->get_el()->src_el()->trim_trailing_white_space())
+				{
+					m_width -= trimmed;
+					if(iter != m_items.rbegin())
+					{
+						auto r_iter = iter;
+						r_iter--;
+						while (true)
+						{
+							(*r_iter)->pos().x -= trimmed;
+							if (r_iter == m_items.rbegin())
+							{
+								break;
+							}
+							r_iter--;
+						}
+					}
+					break;
 				} else
 				{
 					break;
@@ -780,7 +802,9 @@ bool litehtml::line_box::have_last_space()  const
 	auto last_el = get_last_text_part();
 	if(last_el)
 	{
-		return last_el->src_el()->is_white_space() || last_el->src_el()->is_break();
+		return last_el->src_el()->is_white_space() ||
+			last_el->src_el()->is_break() ||
+			last_el->src_el()->has_trailing_white_space();
 	}
 	return false;
 }

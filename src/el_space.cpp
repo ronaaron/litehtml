@@ -6,6 +6,10 @@ litehtml::el_space::el_space(const char* text, const std::shared_ptr<document>& 
 {
 }
 
+litehtml::el_space::el_space(const char* text, size_t len, const std::shared_ptr<document>& doc) : el_text(text, len, doc)
+{
+}
+
 bool litehtml::el_space::is_white_space() const
 {
 	white_space ws = css().get_white_space();

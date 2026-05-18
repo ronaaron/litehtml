@@ -1553,11 +1553,19 @@ void style::add_parsed_property( string_id name, const property_value& propval )
 		if (!prop->second.m_important || (propval.m_important && prop->second.m_important))
 		{
 			prop->second = propval;
+			if (propval.m_has_var)
+			{
+				m_has_vars = true;
+			}
 		}
 	}
 	else
 	{
 		m_properties[name] = propval;
+		if (propval.m_has_var)
+		{
+			m_has_vars = true;
+		}
 	}
 }
 
@@ -1656,6 +1664,11 @@ void subst_vars_(string_id name, css_token_vector& tokens, const html_tag* el)
 
 void style::subst_vars(const html_tag* el)
 {
+	if (!m_has_vars)
+	{
+		return;
+	}
+
 	for (auto& prop : m_properties)
 	{
 		if (prop.second.m_has_var)
@@ -1666,6 +1679,16 @@ void style::subst_vars(const html_tag* el)
 			// if it is a custom property it will be re-added as a css_token_vector
 			// if it is a standard css property it will be parsed and properly added as typed property
 			add_property(prop.first, value, "", prop.second.m_important, el->get_document()->container());
+		}
+	}
+
+	m_has_vars = false;
+	for (const auto& prop : m_properties)
+	{
+		if (prop.second.m_has_var)
+		{
+			m_has_vars = true;
+			break;
 		}
 	}
 }

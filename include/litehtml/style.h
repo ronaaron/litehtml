@@ -48,6 +48,7 @@ namespace litehtml
 		typedef std::vector<style::ptr>		vector;
 	private:
 		props_map							m_properties;
+		bool								m_has_vars = false;
 		static std::map<string_id, string>	m_valid_values;
 	public:
 		void add(const css_token_vector& tokens, const string& baseurl = "", document_container* container = nullptr);
@@ -62,8 +63,10 @@ namespace litehtml
 		void clear()
 		{
 			m_properties.clear();
+			m_has_vars = false;
 		}
 
+		bool has_vars() const { return m_has_vars; }
 		void subst_vars(const html_tag* el);
 
 	private:
