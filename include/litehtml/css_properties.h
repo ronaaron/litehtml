@@ -21,11 +21,6 @@ namespace litehtml
 		CompT	computed_value;
 
 		css_property(const CssT& css_val, const CompT& computed_val) : css_value(css_val), computed_value(computed_val) {}
-
-		bool operator==(const css_property& val) const
-		{
-			return css_value == val.css_value && computed_value == val.computed_value;
-		}
 	};
 
 	// CSS Properties types
@@ -94,8 +89,6 @@ namespace litehtml
 		flex_align_items		m_flex_align_items;
 		flex_align_items		m_flex_align_self;
 		flex_align_content		m_flex_align_content;
-		css_length				m_row_gap;
-		css_length				m_column_gap;
 
 		caption_side			m_caption_side;
 
@@ -152,14 +145,11 @@ namespace litehtml
 				m_flex_align_items(flex_align_items_stretch),
 				m_flex_align_self(flex_align_items_auto),
 				m_flex_align_content(flex_align_content_stretch),
-				m_row_gap(0, css_units_px),
-				m_column_gap(0, css_units_px),
 				m_order(0)
 		{}
 
 		void compute(const html_tag* el, const std::shared_ptr<document>& doc);
-		bool operator==(const css_properties& other) const;
-		std::vector<std::tuple<string, string>> dump_get_attrs() const;
+		std::vector<std::tuple<string, string>> dump_get_attrs();
 
 		element_position get_position() const;
 		void set_position(element_position mElPosition);
@@ -290,8 +280,6 @@ namespace litehtml
 		flex_align_items get_flex_align_items() const;
 		flex_align_items get_flex_align_self() const;
 		flex_align_content get_flex_align_content() const;
-		const css_length& get_row_gap() const;
-		const css_length& get_column_gap() const;
 
 		int get_order() const;
 		void set_order(int order);
@@ -704,16 +692,6 @@ namespace litehtml
 	inline flex_align_content css_properties::get_flex_align_content() const
 	{
 		return m_flex_align_content;
-	}
-
-	inline const css_length& css_properties::get_row_gap() const
-	{
-		return m_row_gap;
-	}
-
-	inline const css_length& css_properties::get_column_gap() const
-	{
-		return m_column_gap;
 	}
 
 	inline caption_side css_properties::get_caption_side() const

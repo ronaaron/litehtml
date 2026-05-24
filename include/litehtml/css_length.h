@@ -42,8 +42,6 @@ namespace litehtml
 		pixel_t		calc_percent(pixel_t width) const;
 		bool		from_token(const css_token& token, int options, const string& predefined_keywords = "");
 		string		to_string() const;
-		bool		operator==(const css_length& val) const;
-
 	};
 
 	using length_vector = vector<css_length>;
@@ -127,13 +125,6 @@ namespace litehtml
 			}
 		}
 		return 0;
-	}
-
-	inline bool css_length::operator==(const css_length& val) const
-	{
-		if (m_is_predefined != val.m_is_predefined) return false;
-		if (m_is_predefined) return m_predef == val.m_predef;
-		return m_value == val.m_value && m_units == val.m_units;
 	}
 }
 

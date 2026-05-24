@@ -140,13 +140,6 @@ namespace litehtml
 		std::unique_ptr<background_layer::radial_gradient> get_radial_gradient_layer(int idx, const background_layer& layer) const;
 		std::unique_ptr<background_layer::conic_gradient> get_conic_gradient_layer(int idx, const background_layer& layer) const;
 		void draw_layer(uint_ptr hdc, int idx, const background_layer& layer, document_container* container) const;
-
-		bool operator==(const background& val) const
-		{
-			return m_image == val.m_image && m_baseurl == val.m_baseurl && m_color == val.m_color &&
-				   m_attachment == val.m_attachment && m_position_x == val.m_position_x && m_position_y == val.m_position_y &&
-				   m_size == val.m_size && m_repeat == val.m_repeat && m_clip == val.m_clip && m_origin == val.m_origin;
-		}
 	};
 }
 

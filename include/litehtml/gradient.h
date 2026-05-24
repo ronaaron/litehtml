@@ -114,11 +114,6 @@ namespace litehtml
 			color_stop(web_color color, float angle)       : color(color), angle(angle)          {}
 			color_stop(css_length length)                  : is_color_hint(true), length(length) {}
 			color_stop(float angle)                        : is_color_hint(true), angle(angle)   {}
-
-			bool operator==(const color_stop& val) const
-			{
-				return is_color_hint == val.is_color_hint && color == val.color && length == val.length && angle == val.angle;
-			}
 		};
 
 		string_id m_type;
@@ -175,14 +170,6 @@ namespace litehtml
 		bool is_radial() const { return m_type == _radial_gradient_ || m_type == _repeating_radial_gradient_; }
 		bool is_conic() const { return m_type == _conic_gradient_ || m_type == _repeating_conic_gradient_; }
 
-		bool operator==(const gradient& val) const
-		{
-			return m_type == val.m_type && m_side == val.m_side && angle == val.angle && m_colors == val.m_colors &&
-				   position_x == val.position_x && position_y == val.position_y && radial_shape == val.radial_shape &&
-				   radial_extent == val.radial_extent && radial_radius_x == val.radial_radius_x && radial_radius_y == val.radial_radius_y &&
-				   conic_from_angle == val.conic_from_angle && color_space == val.color_space && hue_interpolation == val.hue_interpolation;
-		}
-
 		static gradient transparent;
 	};
 
@@ -213,11 +200,6 @@ namespace litehtml
 				return m_gradient.is_empty();
 			}
 			return true;
-		}
-
-		bool operator==(const image& val) const
-		{
-			return type == val.type && url == val.url && m_gradient == val.m_gradient;
 		}
 	};
 

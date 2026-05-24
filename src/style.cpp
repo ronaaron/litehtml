@@ -253,11 +253,6 @@ void style::add_property(string_id name, const css_token_vector& value, const st
 	case _padding_bottom_:
 		return add_length_property(name, val, "", f_length_percentage|f_positive, important);
 
-	// normal | <length-percentage [0,∞]>  https://developer.mozilla.org/en-US/docs/Web/CSS/row-gap
-	case _row_gap_:
-	case _column_gap_:
-		return add_length_property(name, val, "normal", f_length_percentage|f_positive, important);
-
 	// auto | <length-percentage>  https://developer.mozilla.org/en-US/docs/Web/CSS/left
 	case _left_:
 	case _right_:
@@ -407,25 +402,6 @@ void style::add_property(string_id name, const css_token_vector& value, const st
 		{
 			add_parsed_property(__litehtml_border_spacing_x_, property_value(len[0], important));
 			add_parsed_property(__litehtml_border_spacing_y_, property_value(len[1], important));
-		}
-		break;
-
-	case _gap_:
-		if (value.size() == 1 || value.size() == 2)
-		{
-			css_length a, b;
-			if (a.from_token(value[0], f_length_percentage | f_positive, "normal"))
-			{
-				bool valid = true;
-				if (value.size() == 1) b = a;
-				else if (!b.from_token(value[1], f_length_percentage | f_positive, "normal")) valid = false;
-
-				if (valid)
-				{
-					add_parsed_property(_row_gap_, property_value(a, important));
-					add_parsed_property(_column_gap_, property_value(b, important));
-				}
-			}
 		}
 		break;
 

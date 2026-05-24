@@ -93,6 +93,23 @@ namespace litehtml
 		text_emphasis_position_right	= 0x04,
 	};
 
+	struct rendered_width
+	{
+		pixel_t natural_width = 0; // The width required to render the element without additional word wrapping.
+		pixel_t min_width	  = 0; // The minimum width the element can be rendered
+
+		void merge(const rendered_width& other)
+		{
+			natural_width = std::max(natural_width, other.natural_width);
+			min_width	  = std::max(min_width, other.min_width);
+		}
+
+		void reset()
+		{
+			natural_width = 0;
+			min_width	  = 0;
+		}
+	};
 
 	using byte = unsigned char;
 	using ucode_t = unsigned int;
@@ -135,11 +152,6 @@ namespace litehtml
 
 		size() : width(0), height(0)
 		{
-		}
-
-		bool operator==(const size& val) const
-		{
-			return width == val.width && height == val.height;
 		}
 	};
 
@@ -212,20 +224,30 @@ namespace litehtml
 		}
 
 		[[nodiscard]]
-		bool does_intersect(const position* val) const
+		bool does_intersect(const position* val, bool can_touch = false) const
 		{
-			if(!val) return true;
+			if(!val)
+				return true;
 
-			return (
-				left()			<= val->right()		&&
-				right()			>= val->left()		&&
-				bottom()		>= val->top()		&&
-				top()			<= val->bottom()	)
-				|| (
-				val->left()		<= right()			&&
-				val->right()	>= left()			&&
-				val->bottom()	>= top()			&&
-				val->top()		<= bottom()			);
+			if(!can_touch)
+				return (left() <= val->right() && right() >= val->left() && bottom() >= val->top() &&
+						top() <= val->bottom()) ||
+					   (val->left() <= right() && val->right() >= left() && val->bottom() >= top() &&
+						val->top() <= bottom());
+			else
+				return (left() < val->right() && right() > val->left() && bottom() > val->top() &&
+						top() < val->bottom()) ||
+					   (val->left() < right() && val->right() > left() && val->bottom() > top() &&
+						val->top() < bottom());
+		}
+
+		[[nodiscard]]
+		bool on_same_line(const position& val, bool can_touch = false) const
+		{
+			if(can_touch)
+				return !(bottom() <= val.top() || top() >= val.bottom());
+			else
+				return !(bottom() < val.top() || top() > val.bottom());
 		}
 
 		[[nodiscard]]
@@ -290,13 +312,6 @@ namespace litehtml
 		bool		draw_spaces = true;	// True to call draw text function for spaces. If False, just use space width without draw.
 		pixel_t		sub_shift = 0;		// The baseline shift for subscripts.
 		pixel_t		super_shift = 0;	// The baseline shift for superscripts.
-
-		bool operator==(const font_metrics& val) const
-		{
-			return font_size == val.font_size && height == val.height && ascent == val.ascent &&
-				   descent == val.descent && x_height == val.x_height && ch_width == val.ch_width &&
-				   draw_spaces == val.draw_spaces && sub_shift == val.sub_shift && super_shift == val.super_shift;
-		}
 
 		pixel_t base_line() const	{ return descent; }
 	};
@@ -1058,7 +1073,7 @@ namespace litehtml
 		flex_align_items_safe  = 0x800,
 	};
 
-#define flex_align_content_strings		"flex-start;start;flex-end;end;center;space-between;space-around;space-evenly;stretch"
+#define flex_align_content_strings		"flex-start;start;flex-end;end;center;space-between;space-around;stretch"
 
 	enum flex_align_content
 	{
@@ -1069,7 +1084,6 @@ namespace litehtml
 		flex_align_content_center,
 		flex_align_content_space_between,
 		flex_align_content_space_around,
-		flex_align_content_space_evenly,
 		flex_align_content_stretch
 	};
 

@@ -38,11 +38,11 @@ void litehtml::el_text::compute_styles(bool /*recursive*/)
 	css_w().set_display(display_inline_text);
 	css_w().set_float(float_none);
 
-	if(css().get_text_transform() != text_transform_none)
+	if(m_css.get_text_transform() != text_transform_none)
 	{
 		m_transformed_text	= m_text;
 		m_use_transformed = true;
-		get_document()->container()->transform_text(m_transformed_text, css().get_text_transform());
+		get_document()->container()->transform_text(m_transformed_text, m_css.get_text_transform());
 	} else
 	{
 		m_use_transformed = false;

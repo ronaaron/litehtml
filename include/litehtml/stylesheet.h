@@ -3,7 +3,6 @@
 
 #include "css_selector.h"
 #include "css_tokenizer.h"
-#include <unordered_map>
 
 namespace litehtml
 {
@@ -44,37 +43,12 @@ public:
 class css
 {
 	css_selector::vector	m_selectors;
-
-	// Selector hash index — built by sort_selectors().
-	// Each selector goes into exactly ONE bucket (highest priority wins):
-	//   id > class > tag > universal
-	// This deduplicates: a selector with both #id and .class goes only into by_id.
-	struct selector_index
-	{
-		std::unordered_map<string_id, std::vector<size_t>> by_id;    // right-most has #id
-		std::unordered_map<string_id, std::vector<size_t>> by_class; // right-most has .class (no #id)
-		std::unordered_map<string_id, std::vector<size_t>> by_tag;   // right-most has specific tag (no #id, no .class)
-		std::vector<size_t> universal;                                // tag=* with no #id, no .class
-	} m_index;
-
-	static const std::vector<size_t> s_empty_index;
-
 public:
 
 	const css_selector::vector& selectors() const
 	{
 		return m_selectors;
 	}
-
-	// Gather candidate selector indices for an element with the given tag/id/classes.
-	// Results are appended to `out`.
-	void get_candidates(string_id tag, string_id id,
-						const std::vector<string_id>& classes,
-						std::vector<size_t>& out) const;
-
-	// Get selector indices that have the given class in their right-most compound selector.
-	// Used by set_class() to discover selectors for newly-added classes.
-	const std::vector<size_t>& selectors_for_class(string_id cls) const;
 
 	template<class Input>
 	void	parse_css_stylesheet(const Input& input, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media = nullptr, bool top_level = true);
@@ -85,7 +59,6 @@ private:
 	bool	parse_style_rule(raw_rule::ptr rule, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media);
 	void	parse_import_rule(raw_rule::ptr rule, string baseurl, shared_ptr<document> doc, media_query_list_list::ptr media);
 	void	add_selector(const css_selector::ptr& selector);
-	void	build_index();
 };
 
 inline void css::add_selector(const css_selector::ptr& selector)

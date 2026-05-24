@@ -303,9 +303,6 @@ STRING_ID(
 	_flex_grow_,
 	_flex_shrink_,
 	_flex_basis_,
-	_gap_,
-	_row_gap_,
-	_column_gap_,
 
 	_caption_side_,
 	_order_,

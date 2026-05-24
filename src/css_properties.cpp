@@ -508,10 +508,6 @@ void litehtml::css_properties::compute_flex(const html_tag* el, const document::
 		m_flex_justify_content = (flex_justify_content) el->get_property<int>(_justify_content_, false, flex_justify_content_flex_start, offset(m_flex_justify_content));
 		m_flex_align_items = (flex_align_items) el->get_property<int>(_align_items_, false, flex_align_items_normal, offset(m_flex_align_items));
 		m_flex_align_content = (flex_align_content) el->get_property<int>(_align_content_, false, flex_align_content_stretch, offset(m_flex_align_content));
-		m_row_gap = el->get_property<css_length>(_row_gap_, false, css_length(0, css_units_px), offset(m_row_gap));
-		m_column_gap = el->get_property<css_length>(_column_gap_, false, css_length(0, css_units_px), offset(m_column_gap));
-		doc->cvt_units(m_row_gap, m_font_metrics, 0);
-		doc->cvt_units(m_column_gap, m_font_metrics, 0);
 	}
 	m_flex_align_self = (flex_align_items) el->get_property<int>(_align_self_, false, flex_align_items_auto, offset(m_flex_align_self));
 	auto parent = el->parent();
@@ -560,7 +556,7 @@ void litehtml::css_properties::snap_border_width(css_length& width, const std::s
 	width.set_value(px, css_units_px);
 }
 
-std::vector<std::tuple<litehtml::string, litehtml::string>> litehtml::css_properties::dump_get_attrs() const
+std::vector<std::tuple<litehtml::string, litehtml::string>> litehtml::css_properties::dump_get_attrs()
 {
 	std::vector<std::tuple<string, string>> ret;
 
@@ -596,70 +592,3 @@ std::vector<std::tuple<litehtml::string, litehtml::string>> litehtml::css_proper
 
 	return ret;
 }
-
-bool litehtml::css_properties::operator==(const css_properties& other) const {
-	return m_css_width == other.m_css_width
-		&& m_el_position == other.m_el_position
-		&& m_appearance == other.m_appearance
-		&& m_css_margins == other.m_css_margins
-		&& m_color == other.m_color
-		&& m_flex_wrap == other.m_flex_wrap
-		&& m_border_collapse == other.m_border_collapse
-		&& m_list_style_type == other.m_list_style_type
-		&& m_flex_align_self == other.m_flex_align_self
-		&& m_flex_basis == other.m_flex_basis
-		&& m_list_style_position == other.m_list_style_position
-		&& m_float == other.m_float
-		&& m_clear == other.m_clear
-		&& m_css_max_height == other.m_css_max_height
-		&& m_flex_justify_content == other.m_flex_justify_content
-		&& m_css_height == other.m_css_height
-		&& m_text_decoration_thickness == other.m_text_decoration_thickness
-		&& m_white_space == other.m_white_space
-		&& m_bg == other.m_bg
-		&& m_font_metrics == other.m_font_metrics
-		&& m_text_decoration_style == other.m_text_decoration_style
-		&& m_flex_align_content == other.m_flex_align_content
-		&& m_font_weight == other.m_font_weight
-		&& m_css_text_indent == other.m_css_text_indent
-		&& m_line_height == other.m_line_height
-		&& m_css_line_height == other.m_css_line_height
-		&& m_box_sizing == other.m_box_sizing
-		&& m_text_transform == other.m_text_transform
-		&& m_flex_grow == other.m_flex_grow
-		&& m_css_offsets == other.m_css_offsets
-		&& m_visibility == other.m_visibility
-		&& m_text_align == other.m_text_align
-		&& m_text_decoration_line == other.m_text_decoration_line
-		&& m_text_emphasis_position == other.m_text_emphasis_position
-		&& m_flex_align_items == other.m_flex_align_items
-		&& m_font == other.m_font
-		&& m_font_size == other.m_font_size
-		&& m_text_decoration_color == other.m_text_decoration_color
-		&& m_css_border_spacing_x == other.m_css_border_spacing_x
-		&& m_css_borders == other.m_css_borders
-		&& m_css_min_height == other.m_css_min_height
-		&& m_css_max_width == other.m_css_max_width
-		&& m_vertical_align == other.m_vertical_align
-		&& m_caption_side == other.m_caption_side
-		&& m_display == other.m_display
-		&& m_css_border_spacing_y == other.m_css_border_spacing_y
-		&& m_order == other.m_order
-		&& m_overflow == other.m_overflow
-		&& m_z_index == other.m_z_index
-		&& m_css_padding == other.m_css_padding
-		&& m_flex_shrink == other.m_flex_shrink
-		&& m_flex_direction == other.m_flex_direction
-		&& m_font_style == other.m_font_style
-		&& m_css_min_width == other.m_css_min_width
-		&& m_text_emphasis_color == other.m_text_emphasis_color
-		&& m_list_style_image == other.m_list_style_image
-		&& m_list_style_image_baseurl == other.m_list_style_image_baseurl
-		&& m_cursor == other.m_cursor
-		&& m_content == other.m_content
-		&& m_text_emphasis_style == other.m_text_emphasis_style
-		&& m_font_family == other.m_font_family
-		&& m_row_gap == other.m_row_gap
-		&& m_column_gap == other.m_column_gap;
-}
-
