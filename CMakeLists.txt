@@ -55,8 +55,7 @@ set(SOURCE_LITEHTML
 	src/style.cpp
 	src/stylesheet.cpp
 	src/table.cpp
-	src/tstring_view.cpp
-	src/url.cpp
+		src/url.cpp
 	src/url_path.cpp
 	src/utf8_strings.cpp
 	src/web_color.cpp
@@ -125,8 +124,7 @@ set(HEADER_LITEHTML
 	include/litehtml/style.h
 	include/litehtml/stylesheet.h
 	include/litehtml/table.h
-	include/litehtml/tstring_view.h
-	include/litehtml/types.h
+		include/litehtml/types.h
 	include/litehtml/url.h
 	include/litehtml/url_path.h
 	include/litehtml/utf8_strings.h
@@ -201,7 +199,7 @@ else ()
 	ExternalProject_Add(
 			litehtml-tests
 			GIT_REPOSITORY      https://github.com/litehtml/litehtml-tests.git
-			GIT_TAG             f750c7c4c1f0b2db63049f45ce505442b2685fa6
+			GIT_TAG             2bb4d22d7d2a0916e4ec69e30d71b39bfe3b7b8a
 			SOURCE_DIR          "${CMAKE_BINARY_DIR}/litehtml-tests-src"
 			BINARY_DIR          "${CMAKE_BINARY_DIR}/litehtml-tests-build"
 			CMAKE_ARGS          -DLITEHTML_PATH=${CMAKE_CURRENT_SOURCE_DIR}
