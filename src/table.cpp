@@ -271,7 +271,14 @@ void litehtml::table_grid::distribute_width(pixel_t width, int start, int end)
                 }
             } else
             {
-                distribute_columns.back()->width += width;
+                const pixel_t share       = width / pixel_t(static_cast<int>(distribute_columns.size()));
+                pixel_t       distributed = 0_px;
+                for(const auto& column : distribute_columns)
+                {
+                    column->width += share;
+                    distributed   += share;
+                }
+                distribute_columns.back()->width += width - distributed;
                 added_width                       = width;
             }
         }
