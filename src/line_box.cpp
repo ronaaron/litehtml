@@ -249,7 +249,7 @@ std::list<std::unique_ptr<litehtml::line_box_item>> litehtml::line_box::finish(
                 // remove trailing empty inline_start markers
                 // these markers will be added at the beginning of the next line box
                 m_width -= m_items.back()->width();
-                ret_items.emplace_back(std::move(m_items.back()));
+                ret_items.emplace_front(std::move(m_items.back()));
                 m_items.pop_back();
             } else
             {
@@ -351,7 +351,7 @@ std::list<std::unique_ptr<litehtml::line_box_item>> litehtml::line_box::finish(
     current_context.start_lbi   = nullptr;
     current_context.line_height = m_default_line_height.computed_value;
 
-    m_rendered_width.reset();
+    m_min_width = 0_px;
 
     struct items_dimensions
     {
@@ -387,8 +387,7 @@ std::list<std::unique_ptr<litehtml::line_box_item>> litehtml::line_box::finish(
     for(const auto& lbi : m_items)
     {
         // Apply text-align-justify
-        m_rendered_width.natural_width += lbi->get_rendered_min_width();
-        m_rendered_width.min_width      = std::max(m_rendered_width.min_width, lbi->get_rendered_min_width());
+        m_min_width += lbi->get_rendered_min_width();
         if(spacing_x != 0_px && counter)
         {
             cixx += offj;
@@ -682,7 +681,13 @@ std::list<std::unique_ptr<litehtml::line_box_item>> litehtml::line_box::finish(
             lbi->pos().y += m_top + top_shift;
         }
 
-        lbi->get_el()->apply_relative_shift(containing_block_size);
+        // Text and inline blocks move themselves; an inline element's start, continuation and end
+        // stand for its boxes, moved below.
+        if(!is_one_of(lbi->get_type(), line_box_item::type_inline_start, line_box_item::type_inline_continue,
+                      line_box_item::type_inline_end))
+        {
+            lbi->get_el()->apply_relative_shift(containing_block_size);
+        }
 
         // Calculate and push inline box into the render item element
         if(lbi->get_type() == line_box_item::type_inline_start ||
@@ -692,15 +697,26 @@ std::list<std::unique_ptr<litehtml::line_box_item>> litehtml::line_box::finish(
             {
                 lbi->get_el()->clear_inline_boxes();
             }
+            // A relatively positioned inline element moves its boxes (background, borders) and,
+            // through its position, its content (its children are drawn from it). The position is
+            // set to the shift rather than shifted: adding it at the start, every continuation and
+            // the end moved the text two or more times, and again on every layout.
+            const position shift = lbi->get_el()->relative_shift(containing_block_size);
+            if(lbi->get_el()->src_el()->css().get_position() == element_position_relative)
+            {
+                lbi->get_el()->pos().x = shift.x;
+                lbi->get_el()->pos().y = shift.y;
+            }
             inlines.emplace_back(lbi->get_el());
-            inlines.back().box.x      = lbi->left();
-            inlines.back().box.y      = lbi->top() - lbi->get_el()->content_offset_top();
+            inlines.back().box.x      = lbi->left() + shift.x;
+            inlines.back().box.y      = lbi->top() - lbi->get_el()->content_offset_top() + shift.y;
             inlines.back().box.height = lbi->bottom() - lbi->top() + lbi->get_el()->content_offset_height();
         } else if(lbi->get_type() == line_box_item::type_inline_end)
         {
             if(!inlines.empty())
             {
-                inlines.back().box.width = lbi->right() - inlines.back().box.x;
+                inlines.back().box.width =
+                    lbi->right() + lbi->get_el()->relative_shift(containing_block_size).x - inlines.back().box.x;
                 inlines.back().element->add_inline_box(inlines.back().box);
                 inlines.pop_back();
             }
@@ -709,7 +725,7 @@ std::list<std::unique_ptr<litehtml::line_box_item>> litehtml::line_box::finish(
 
     for(auto iter = inlines.rbegin(); iter != inlines.rend(); ++iter)
     {
-        iter->box.width = m_items.back()->right() - iter->box.x;
+        iter->box.width = m_items.back()->right() + iter->element->relative_shift(containing_block_size).x - iter->box.x;
         iter->element->add_inline_box(iter->box);
 
         ret_items.emplace_front(std::unique_ptr<line_box_item>(new lbi_continue(iter->element)));
